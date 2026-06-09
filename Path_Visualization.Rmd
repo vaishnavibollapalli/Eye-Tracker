@@ -1,0 +1,346 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+Eye Tracking Scanpath Visualization
+Data files Used: test1_F_S.csv (fixations & saccades)
+      test1_gazetracking_clean.csv (raw gaze path)
+David_Carson.jpg (background stimulus image)
+
+
+```{r}
+#install.packages(c("ggplot2", "jpeg", "grid", "dplyr", "scales", "ggrepel"))
+
+#library(ggplot2)
+#library(jpeg)
+#library(grid)
+#library(dplyr)
+#library(scales)
+#library(ggrepel)
+
+# Load data 
+fs   <- read.csv("test1_F_S.csv")
+gaze <- read.csv("test1_gazetracking_clean.csv")
+
+# Extract fixations (rows that have Fixation X/Y)
+fixations <- fs %>%
+  filter(!is.na(Fixation.X) & !is.na(Fixation.Y)) %>%
+  select(
+    fixation_index = Fixation.Index.by.Stimulus,
+    x              = Fixation.X,
+    y              = Fixation.Y,
+    duration       = Fixation.Duration
+  ) %>%
+  arrange(fixation_index)
+
+# Cleaning gaze data column names
+colnames(gaze) <- c("timestamp", "gaze_x", "gaze_y")
+
+# Loading background image
+list.files(pattern = "jpg|jpeg|JPG")
+bg_img <- readJPEG("David Carson.jpg")
+img_w    <- ncol(bg_img)   # 1920
+img_h    <- nrow(bg_img)   # 1200
+
+# Fliping Y axis 
+# Eye-tracker origin is top-left; ggplot origin is bottom-left
+fixations <- fixations %>%
+  mutate(y_flip = img_h - y)
+
+gaze_plot <- gaze %>%
+  mutate(y_flip = img_h - gaze_y)
+
+# Plot 1: Scanpath (fixations + saccades) 
+
+scanpath_plot <- ggplot() +
+
+  # Background image
+  annotation_raster(bg_img,
+                    xmin = 0, xmax = img_w,
+                    ymin = 0, ymax = img_h) +
+
+  # Saccade lines connecting fixations in order
+  geom_path(data    = fixations,
+            aes(x   = x, y = y_flip),
+            colour  = "white",
+            linewidth = 0.7,
+            alpha   = 0.8,
+            lineend = "round") +
+
+  # Fixation circles — size proportional to duration
+  geom_point(data   = fixations,
+             aes(x  = x, y = y_flip, size = duration),
+             shape  = 21,
+             fill   = scales::alpha("#00C8FF", 0.45),
+             colour = "white",
+             stroke = 1.2) +
+
+  # Fixation order labels
+  geom_label(data        = fixations,
+             aes(x       = x, y = y_flip,
+                 label   = fixation_index),
+             size        = 3,
+             fontface    = "bold",
+             colour      = "white",
+             fill        = scales::alpha("black", 0.55),
+             label.size  = 0,
+             label.padding = unit(0.15, "lines")) +
+
+  # Scales & theme
+  scale_size_continuous(name   = "Fixation Duration (ms)",
+                        range  = c(4, 18)) +
+  scale_x_continuous(limits = c(0, img_w), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, img_h), expand = c(0, 0)) +
+  coord_fixed() +
+  labs(title    = "Eye Tracking — Scanpath",
+       subtitle = "Circles = fixation duration | Lines = saccades | Numbers = fixation order",
+       x = NULL, y = NULL) +
+  theme_void(base_size = 13) +
+  theme(
+    plot.title      = element_text(colour = "white", face = "bold",
+                                   hjust = 0.5, size = 16,
+                                   margin = margin(b = 4)),
+    plot.subtitle   = element_text(colour = "grey80", hjust = 0.5, size = 10),
+    plot.background = element_rect(fill = "black", colour = NA),
+    legend.position = "bottom",
+    legend.text     = element_text(colour = "white"),
+    legend.title    = element_text(colour = "white"),
+    legend.key      = element_rect(fill = "black", colour = NA)
+  )
+
+ggsave("scanpath_plot.png",
+       plot   = scanpath_plot,
+       width  = img_w / 100,
+       height = img_h / 100 + 1.2,   
+       dpi    = 100,
+       bg     = "black")
+
+cat("✔  Saved: scanpath_plot.png\n")
+
+# Plot 2: Raw Gaze Path
+
+gaze_path_plot <- ggplot() +
+
+  annotation_raster(bg_img,
+                    xmin = 0, xmax = img_w,
+                    ymin = 0, ymax = img_h) +
+
+  # Continuous gaze trace coloured by time
+  geom_path(data = gaze_plot,
+            aes(x = gaze_x, y = y_flip, colour = timestamp),
+            linewidth = 0.5, alpha = 0.7, lineend = "round") +
+
+  scale_colour_viridis_c(name   = "Time (ms)",
+                         option = "plasma") +
+  scale_x_continuous(limits = c(0, img_w), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, img_h), expand = c(0, 0)) +
+  coord_fixed() +
+  labs(title    = "Eye Tracking — Raw Gaze Path",
+       subtitle = "Colour = time progression (early → late)",
+       x = NULL, y = NULL) +
+  theme_void(base_size = 13) +
+  theme(
+    plot.title      = element_text(colour = "white", face = "bold",
+                                   hjust = 0.5, size = 16,
+                                   margin = margin(b = 4)),
+    plot.subtitle   = element_text(colour = "grey80", hjust = 0.5, size = 10),
+    plot.background = element_rect(fill = "black", colour = NA),
+    legend.position = "bottom",
+    legend.text     = element_text(colour = "white"),
+    legend.title    = element_text(colour = "white"),
+    legend.key      = element_rect(fill = "black", colour = NA)
+  )
+
+ggsave("gaze_path_plot.png",
+       plot   = gaze_path_plot,
+       width  = img_w / 100,
+       height = img_h / 100 + 1.2,
+       dpi    = 100,
+       bg     = "black")
+
+cat("✔  Saved: gaze_path_plot.png\n")
+
+# Plot 3: Heatmap of Gaze Density
+
+heatmap_plot <- ggplot() +
+
+  annotation_raster(bg_img,
+                    xmin = 0, xmax = img_w,
+                    ymin = 0, ymax = img_h) +
+
+  stat_density_2d(data = gaze_plot,
+                  aes(x = gaze_x, y = y_flip, fill = after_stat(density)),
+                  geom  = "raster",
+                  contour = FALSE,
+                  alpha = 0.55,
+                  h     = c(80, 80)) +
+
+  scale_fill_gradientn(
+    colours = c("transparent", "#0000FF55", "#00FF0099", "#FFFF00CC", "#FF0000"),
+    name    = "Gaze Density") +
+
+  scale_x_continuous(limits = c(0, img_w), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, img_h), expand = c(0, 0)) +
+  coord_fixed() +
+  labs(title    = "Eye Tracking — Gaze Density Heatmap",
+       subtitle = "Warmer colours = more time spent looking",
+       x = NULL, y = NULL) +
+  theme_void(base_size = 13) +
+  theme(
+    plot.title      = element_text(colour = "white", face = "bold",
+                                   hjust = 0.5, size = 16,
+                                   margin = margin(b = 4)),
+    plot.subtitle   = element_text(colour = "grey80", hjust = 0.5, size = 10),
+    plot.background = element_rect(fill = "black", colour = NA),
+    legend.position = "bottom",
+    legend.text     = element_text(colour = "white"),
+    legend.title    = element_text(colour = "white"),
+    legend.key      = element_rect(fill = "black", colour = NA)
+  )
+
+ggsave("heatmap_plot.png",
+       plot   = heatmap_plot,
+       width  = img_w / 100,
+       height = img_h / 100 + 1.2,
+       dpi    = 100,
+       bg     = "black")
+
+cat("✔  Saved: heatmap_plot.png\n")
+cat("\nAll three plots saved! Open them in your Files pane.\n")
+```
+Animation:
+
+Eye Tracking — "Through Their Eyes" Animation
+Replays raw gaze data as a moving dot over the stimulus/poster
+```{r}
+#install.packages(c("gganimate", "gifski"))
+
+
+#library(ggplot2)
+#library(jpeg)
+#library(grid)
+#library(dplyr)
+#library(gganimate)
+#library(gifski)   # used for creating GIF frames
+
+# Loading data
+
+gaze <- read.csv("test1_gazetracking_clean.csv")
+colnames(gaze) <- c("timestamp", "gaze_x", "gaze_y")
+
+# Adding a frame index (each row = one frame of animation)
+gaze <- gaze %>%
+  mutate(frame = row_number())
+
+# Loading the background image 
+
+bg_img <- readJPEG("David Carson.jpg")
+img_w  <- ncol(bg_img)   # 1920
+img_h  <- nrow(bg_img)   # 1200
+
+#Flip Y (eye tracker: top-left origin → ggplot: bottom-left) 
+
+gaze <- gaze %>%
+  mutate(y_flip = img_h - gaze_y)
+
+# Building a "trail"
+# For each frame, we keep the last N gaze points so the dot
+# leaves a fading tail — feels more like a real eye movement
+
+trail_length <- 20   # how many past points to show as the trail
+
+gaze_with_trail <- lapply(gaze$frame, function(f) {
+  start <- max(1, f - trail_length + 1)
+  slice <- gaze[start:f, ]
+  slice$current_frame <- f
+  slice$age <- seq_len(nrow(slice))   # 1 = oldest in trail, N = current
+  slice
+}) %>%
+  bind_rows()
+
+# Opacity and size fade: current point is big & opaque, trail fades out
+gaze_with_trail <- gaze_with_trail %>%
+  mutate(
+    alpha_val = age / trail_length,           # 0 = transparent, 1 = opaque
+    size_val  = ifelse(age == trail_length,   # current point is larger
+                       6, 2)
+  )
+
+# 5. Building the animation
+
+p <- ggplot() +
+
+  # Background stimulus image (static)
+  annotation_raster(bg_img,
+                    xmin = 0, xmax = img_w,
+                    ymin = 0, ymax = img_h) +
+
+  # Fading gaze trail
+  geom_point(data  = gaze_with_trail,
+             aes(x     = gaze_x,
+                 y     = y_flip,
+                 alpha = alpha_val,
+                 size  = size_val),
+             colour = "#00C8FF",
+             shape  = 16) +
+
+  # Current gaze point is shown as bright white ring on top
+  geom_point(data   = gaze_with_trail %>% filter(age == trail_length),
+             aes(x  = gaze_x, y = y_flip),
+             colour = "white",
+             fill   = scales::alpha("#00C8FF", 0.6),
+             shape  = 21,
+             size   = 10,
+             stroke = 2) +
+
+  scale_alpha_identity() +
+  scale_size_identity() +
+  scale_x_continuous(limits = c(0, img_w), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, img_h), expand = c(0, 0)) +
+  coord_fixed() +
+  theme_void() +
+  theme(plot.background = element_rect(fill = "black", colour = NA)) +
+
+  # gganimate --> step through each frame
+  transition_manual(current_frame) +
+  labs(title = "Gaze replay  |  t = {current_frame * 8} ms")
+
+#Render and save
+# nframes = number of gaze samples (2042)
+# fps     = controls playback speed. 
+#           Real time ≈ 120 fps (data is ~8ms/sample).
+#           Use 60 for half-speed, 30 for slow-motion.
+
+cat("Rendering animation — this takes 1-2 minutes...\n")
+
+anim <- animate(
+  p,
+  nframes  = nrow(gaze),
+  fps      = 60,            # change to 30 for slower speed, 120 for real-time speed
+  width    = 960,           # half of 1920 to keep file size reasonable
+  height   = 600,           # half of 1200
+  renderer = gifski_renderer("gaze_animation.gif")
+)
+
+cat("✔  Saved: gaze_animation.gif\n")
+cat("   Open it in your browser or Files pane to watch!\n")
+
+# Saving as MP4 --->  (needs ffmpeg installed)
+# anim_save("gaze_animation.mp4",
+#           animation = animate(p, nframes = nrow(gaze), fps = 60,
+#                               width = 960, height = 600,
+#                               renderer = ffmpeg_renderer()))
+```
+
+
+
+
+
+
+
+
+
+
+
