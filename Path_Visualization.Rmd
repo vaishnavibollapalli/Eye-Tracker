@@ -13,12 +13,12 @@ David_Carson.jpg (background stimulus image)
 ```{r}
 #install.packages(c("ggplot2", "jpeg", "grid", "dplyr", "scales", "ggrepel"))
 
-#library(ggplot2)
-#library(jpeg)
-#library(grid)
-#library(dplyr)
-#library(scales)
-#library(ggrepel)
+library(ggplot2)
+library(jpeg)
+library(grid)
+library(dplyr)
+library(scales)
+library(ggrepel)
 
 # Load data 
 fs   <- read.csv("test1_F_S.csv")
@@ -127,10 +127,20 @@ gaze_path_plot <- ggplot() +
                     xmin = 0, xmax = img_w,
                     ymin = 0, ymax = img_h) +
 
-  # Continuous gaze trace coloured by time
+  # White outline layer (draw first so it sits underneath)
+  geom_path(data = gaze_plot,
+            aes(x = gaze_x, y = y_flip),
+            colour    = "white",
+            linewidth = 3.5,
+            alpha     = 0.6,
+            lineend   = "round") +
+
+  # Coloured line on top
   geom_path(data = gaze_plot,
             aes(x = gaze_x, y = y_flip, colour = timestamp),
-            linewidth = 0.5, alpha = 0.7, lineend = "round") +
+            linewidth = 2,
+            alpha     = 1.0,
+            lineend   = "round") +
 
   scale_colour_viridis_c(name   = "Time (ms)",
                          option = "plasma") +
@@ -161,7 +171,6 @@ ggsave("gaze_path_plot.png",
        bg     = "black")
 
 cat("✔  Saved: gaze_path_plot.png\n")
-
 # Plot 3: Heatmap of Gaze Density
 
 heatmap_plot <- ggplot() +
@@ -334,8 +343,513 @@ cat("   Open it in your browser or Files pane to watch!\n")
 #                               renderer = ffmpeg_renderer()))
 ```
 
+```{r}
+install.packages(c("ggplot2","jpeg","png","grid","dplyr","scales",
+                   "gganimate","gifski","stringr","officer","flextable"))
+
+source("multi_poster_analysis.R")   # creates participant_one/<poster>/ folders
+source("build_summary_doc.R")       # creates the comparison Word doc
+```
+
+```{r}
+# Multi-Poster Gaze Analysis — Participant One
+#
+# Generates, for EACH poster the participant viewed:
+#   - scanpath plot   (fixations + saccades over the poster)
+#   - gaze path plot  (raw continuous trace, coloured by time)
+#   - heatmap plot    (density of attention)
+#   - animated GIF    (frame-by-frame gaze replay)
+#
+# All outputs are saved into: participant_one/<poster_name>/
+#
+# Required files in the working directory:
+#   - ET_RExtAPI-GazeAnalysis.csv   (gaze + fixation + saccade data)
+#   - Native_SlideEvents.csv        (slide timing — which poster shown when)
+#   - One image file per poster (matched by name — see POSTER_IMAGE_MAP below)
 
 
+library(ggplot2)
+library(jpeg)
+library(png)
+library(grid)
+library(dplyr)
+library(scales)
+library(gganimate)
+library(gifski)
+library(stringr)
+
+# Map each SourceStimuliName (from the slide events file) to its
+# image filename in your repo. EDIT THIS to match your actual filenames.
+# Only posters listed here will be processed — anything not listed
+# (e.g. "survey" slides) is automatically skipped already, but if a
+# real poster's image is missing, add it here.
+
+POSTER_IMAGE_MAP <- c(
+  "David Carson"                              = "David Carson.jpg",
+  "Armin Hofman- 1955"                        = "Armin Hofman- 1955.jpg",
+  "Jan Tschichold-1938-Der"                   = "Jan Tschichold-1938-Der.jpg",
+  "David Carson - 1990"                       = "David Carson - 1990.jpg",
+  "Sean Alatorre"                             = "Sean Alatorre.jpg",
+  "Paul Rand, 1947"                           = "Paul Rand, 1947.jpg",
+  "bookcover"                                 = "bookcover.jpg",
+  "Joost Schmidt-1923-Saatliches"             = "Joost Schmidt-1923-Saatliches.jpg",
+  "Jan Tschichold-1927-Die Frau ohne Namen"   = "Jan Tschichold-1927-Die Frau ohne Namen.jpg",
+  "Scott Barry- 2010"                         = "Scott Barry- 2010.jpg",
+  "nancy poster"                              = "nancy.jpg",
+  "Barry Ceck - 1988"                         = "Barry Ceck - 1988.jpg",
+  "Ella Rosenblatt- 2021"                     = "Ella Rosenblatt- 2021.jpg",
+  "Iris Chung- 2015"                          = "Iris Chung- 2015.jpg",
+  "Paula Scher - 1995"                        = "Paula Scher - 1995.jpg"
+)
+
+OUTPUT_ROOT <- "participant_one"
+TRAIL_LENGTH <- 20     # frames of fading trail in animation
+ANIM_FPS     <- 60     # playback speed of animation
+
+# Helper: safe filename
+
+safe_name <- function(x) {
+  x <- str_replace_all(x, "[^A-Za-z0-9]+", "_")
+  x <- str_replace_all(x, "_+", "_")
+  str_replace_all(x, "^_|_$", "")
+}
+
+# Loading slide events & determine poster time windows
+
+slides_raw <- read.csv("Native_SlideEvents.csv", skip = 17, stringsAsFactors = FALSE)
+slides_raw$Timestamp <- as.numeric(slides_raw$Timestamp)
+
+# Keep only StartMedia / EndMedia rows for poster images (skip surveys)
+media_events <- slides_raw %>%
+  filter(SlideEvent %in% c("StartMedia", "EndMedia")) %>%
+  filter(SourceStimuliName %in% names(POSTER_IMAGE_MAP))
+
+poster_windows <- media_events %>%
+  group_by(SourceStimuliName) %>%
+  summarise(
+    start_ms = Timestamp[SlideEvent == "StartMedia"][1],
+    end_ms   = Timestamp[SlideEvent == "EndMedia"][1],
+    .groups = "drop"
+  ) %>%
+  mutate(duration_ms = end_ms - start_ms) %>%
+  arrange(start_ms)
+
+cat("Found", nrow(poster_windows), "poster viewing windows:\n")
+print(poster_windows)
+
+# Loading gaze + fixation + saccade data
+
+gaze_raw <- read.csv("ET_RExtAPI-GazeAnalysis.csv", skip = 20, stringsAsFactors = FALSE)
+
+# Rename to short, code-friendly column names
+colnames(gaze_raw) <- c(
+  "RowNumber","Timestamp","GazeX","GazeY","InterpGazeX","InterpGazeY","InterpDist",
+  "GazeVel","GazeAcc","FixIdx","FixIdxStim","FixX","FixY","FixStart","FixEnd",
+  "FixDur","FixDisp","SaccIdx","SaccIdxStim","SaccStart","SaccEnd","SaccDur",
+  "SaccAmp","SaccPeakVel","SaccPeakAcc","SaccPeakDecel","SaccDir"
+)
+
+# Coerce all to numeric (file has occasional stray header-like rows)
+gaze_raw <- gaze_raw %>% mutate(across(everything(), as.numeric))
+gaze_raw <- gaze_raw %>% filter(!is.na(Timestamp))
+
+cat("\nTotal gaze samples loaded:", nrow(gaze_raw), "\n")
+
+# Summary table we'll build up across all posters
+
+summary_rows <- list()
+
+# Main loop — one poster at a time 
+
+for (i in seq_len(nrow(poster_windows))) {
+
+  poster_name  <- poster_windows$SourceStimuliName[i]
+  start_ms     <- poster_windows$start_ms[i]
+  end_ms       <- poster_windows$end_ms[i]
+  img_file     <- POSTER_IMAGE_MAP[[poster_name]]
+  folder_name  <- safe_name(poster_name)
+  out_dir      <- file.path(OUTPUT_ROOT, folder_name)
+
+  cat("\n========================================\n")
+  cat("Processing poster", i, "of", nrow(poster_windows), ":", poster_name, "\n")
+  cat("========================================\n")
+
+  if (!file.exists(img_file)) {
+    cat("  ⚠ SKIPPED — image file not found:", img_file, "\n")
+    next
+  }
+
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+  # ── Slice gaze data to this poster's time window ──
+  poster_gaze <- gaze_raw %>%
+    filter(Timestamp >= start_ms & Timestamp <= end_ms) %>%
+    mutate(rel_time = Timestamp - start_ms)   # time since poster appeared
+
+  if (nrow(poster_gaze) == 0) {
+    cat("  ⚠ SKIPPED — no gaze samples found in this time window\n")
+    next
+  }
+
+  poster_fix <- poster_gaze %>%
+    filter(!is.na(FixX) & !is.na(FixY)) %>%
+    distinct(FixIdx, .keep_all = TRUE) %>%
+    arrange(FixIdx)
+
+  # Loading background image 
+  ext <- tolower(tools::file_ext(img_file))
+  if (ext %in% c("jpg", "jpeg")) {
+    bg_img <- readJPEG(img_file)
+  } else if (ext == "png") {
+    bg_img <- readPNG(img_file)
+  } else {
+    cat("  ⚠ SKIPPED — unsupported image format:", ext, "\n")
+    next
+  }
+  img_w <- ncol(bg_img)
+  img_h <- nrow(bg_img)
+
+  # ── Flip Y (eye-tracker top-left origin -> ggplot bottom-left origin) ──
+  poster_gaze <- poster_gaze %>% mutate(y_flip = img_h - GazeY)
+  poster_fix  <- poster_fix  %>% mutate(y_flip = img_h - FixY)
+
+  base_theme <- theme_void(base_size = 13) +
+    theme(
+      plot.title      = element_text(colour = "white", face = "bold", hjust = 0.5,
+                                     size = 15, margin = margin(b = 4)),
+      plot.subtitle   = element_text(colour = "grey80", hjust = 0.5, size = 9),
+      plot.background = element_rect(fill = "black", colour = NA),
+      legend.position = "bottom",
+      legend.text     = element_text(colour = "white"),
+      legend.title    = element_text(colour = "white"),
+      legend.key      = element_rect(fill = "black", colour = NA)
+    )
+
+  # ── PLOT 1: Scanpath ──
+  scanpath_plot <- ggplot() +
+    annotation_raster(bg_img, xmin = 0, xmax = img_w, ymin = 0, ymax = img_h) +
+    geom_path(data = poster_fix, aes(x = FixX, y = y_flip),
+              colour = "white", linewidth = 0.6, alpha = 0.8, lineend = "round") +
+    geom_point(data = poster_fix, aes(x = FixX, y = y_flip, size = FixDur),
+               shape = 21, fill = scales::alpha("#00C8FF", 0.45),
+               colour = "white", stroke = 1) +
+    scale_size_continuous(name = "Fixation Duration (ms)", range = c(3, 14)) +
+    scale_x_continuous(limits = c(0, img_w), expand = c(0,0)) +
+    scale_y_continuous(limits = c(0, img_h), expand = c(0,0)) +
+    coord_fixed() +
+    labs(title = paste0("Scanpath — ", poster_name),
+         subtitle = "Circle size = fixation duration | Lines = saccades") +
+    base_theme
+
+  ggsave(file.path(out_dir, "scanpath_plot.png"), scanpath_plot,
+         width = img_w/100, height = img_h/100 + 1.1, dpi = 100, bg = "black")
+
+  # ── PLOT 2: Raw gaze path ──
+  gazepath_plot <- ggplot() +
+    annotation_raster(bg_img, xmin = 0, xmax = img_w, ymin = 0, ymax = img_h) +
+    geom_path(data = poster_gaze, aes(x = GazeX, y = y_flip, colour = rel_time),
+              linewidth = 0.4, alpha = 0.7, lineend = "round") +
+    scale_colour_viridis_c(name = "Time (ms)", option = "plasma") +
+    scale_x_continuous(limits = c(0, img_w), expand = c(0,0)) +
+    scale_y_continuous(limits = c(0, img_h), expand = c(0,0)) +
+    coord_fixed() +
+    labs(title = paste0("Gaze Path — ", poster_name),
+         subtitle = "Colour = time progression") +
+    base_theme
+
+  ggsave(file.path(out_dir, "gaze_path_plot.png"), gazepath_plot,
+         width = img_w/100, height = img_h/100 + 1.1, dpi = 100, bg = "black")
+
+  # ── PLOT 3: Heatmap ──
+  heatmap_plot <- ggplot() +
+    annotation_raster(bg_img, xmin = 0, xmax = img_w, ymin = 0, ymax = img_h) +
+    stat_density_2d(data = poster_gaze, aes(x = GazeX, y = y_flip, fill = after_stat(density)),
+                    geom = "raster", contour = FALSE, alpha = 0.55, h = c(80, 80)) +
+    scale_fill_gradientn(colours = c("transparent", "#0000FF55", "#00FF0099",
+                                     "#FFFF00CC", "#FF0000"),
+                         name = "Gaze Density") +
+    scale_x_continuous(limits = c(0, img_w), expand = c(0,0)) +
+    scale_y_continuous(limits = c(0, img_h), expand = c(0,0)) +
+    coord_fixed() +
+    labs(title = paste0("Heatmap — ", poster_name),
+         subtitle = "Warmer = more time spent looking") +
+    base_theme
+
+  ggsave(file.path(out_dir, "heatmap_plot.png"), heatmap_plot,
+         width = img_w/100, height = img_h/100 + 1.1, dpi = 100, bg = "black")
+
+  cat("  ✔ Saved scanpath, gaze path, and heatmap PNGs\n")
+
+  # ── ANIMATION: Gaze replay GIF ──
+  anim_data <- poster_gaze %>% mutate(frame = row_number())
+
+  n_frames_full <- nrow(anim_data)
+  # Cap frames for very long sequences to keep render time reasonable
+  step <- max(1, round(n_frames_full / 600))
+  if (step > 1) {
+    cat("  (long sequence —", n_frames_full, "samples, subsampling every",
+        step, "frames for the GIF)\n")
+    anim_data <- anim_data %>% filter(row_number() %% step == 1)
+    anim_data$frame <- seq_len(nrow(anim_data))
+  }
+
+  trail_data <- lapply(anim_data$frame, function(f) {
+    start <- max(1, f - TRAIL_LENGTH + 1)
+    slice <- anim_data[start:f, ]
+    slice$age <- seq_len(nrow(slice))
+    slice
+  }) %>% bind_rows() %>%
+    mutate(alpha_val = age / TRAIL_LENGTH,
+           size_val  = ifelse(age == TRAIL_LENGTH, 6, 2))
+
+  anim_plot <- ggplot() +
+    annotation_raster(bg_img, xmin = 0, xmax = img_w, ymin = 0, ymax = img_h) +
+    geom_point(data = trail_data, aes(x = GazeX, y = y_flip,
+                                       alpha = alpha_val, size = size_val),
+               colour = "#00C8FF", shape = 16) +
+    geom_point(data = trail_data %>% filter(age == TRAIL_LENGTH),
+               aes(x = GazeX, y = y_flip), colour = "white",
+               fill = scales::alpha("#00C8FF", 0.6), shape = 21, size = 9, stroke = 1.8) +
+    scale_alpha_identity() + scale_size_identity() +
+    scale_x_continuous(limits = c(0, img_w), expand = c(0,0)) +
+    scale_y_continuous(limits = c(0, img_h), expand = c(0,0)) +
+    coord_fixed() + theme_void() +
+    theme(plot.background = element_rect(fill = "black", colour = NA)) +
+    transition_manual(frame)
+
+  tryCatch({
+    animate(anim_plot,
+            nframes  = nrow(anim_data),
+            fps      = ANIM_FPS,
+            width    = 700, height = round(700 * img_h / img_w),
+            renderer = gifski_renderer(file.path(out_dir, "gaze_animation.gif")))
+    cat("  ✔ Saved gaze_animation.gif\n")
+  }, error = function(e) {
+    cat("  ⚠ Animation failed:", conditionMessage(e), "\n")
+  })
+
+  # ── Build summary stats for this poster ──
+  # Determine where attention concentrated: split the image into thirds
+  # (top/middle/bottom and left/center/right) - a quick proxy that helps
+  # decide if attention was on "text" zones (often margins/captions) vs
+  # central imagery. This is a heuristic, not ground truth object detection.
+
+  poster_fix_summary <- poster_fix %>%
+    summarise(
+      n_fixations      = n(),
+      total_fix_time   = sum(FixDur, na.rm = TRUE),
+      mean_fix_dur     = mean(FixDur, na.rm = TRUE),
+      max_fix_dur      = max(FixDur, na.rm = TRUE),
+      longest_fix_x    = FixX[which.max(FixDur)],
+      longest_fix_y    = FixY[which.max(FixDur)]
+    )
+
+  summary_rows[[poster_name]] <- data.frame(
+    Poster              = poster_name,
+    Viewing_Duration_ms = end_ms - start_ms,
+    N_Fixations         = poster_fix_summary$n_fixations,
+    Total_Fixation_ms   = round(poster_fix_summary$total_fix_time, 1),
+    Mean_Fixation_ms    = round(poster_fix_summary$mean_fix_dur, 1),
+    Longest_Fixation_ms = round(poster_fix_summary$max_fix_dur, 1),
+    Longest_Fix_X       = round(poster_fix_summary$longest_fix_x, 0),
+    Longest_Fix_Y       = round(poster_fix_summary$longest_fix_y, 0),
+    Image_Width         = img_w,
+    Image_Height        = img_h
+  )
+}
+
+# Saving the master summary table 
+
+summary_df <- bind_rows(summary_rows)
+write.csv(summary_df, file.path(OUTPUT_ROOT, "summary_stats.csv"), row.names = FALSE)
+
+cat("\n\n========================================\n")
+cat("ALL POSTERS PROCESSED\n")
+cat("========================================\n")
+cat("Outputs saved under:", OUTPUT_ROOT, "/\n")
+cat("Summary table saved to:", file.path(OUTPUT_ROOT, "summary_stats.csv"), "\n")
+print(summary_df)
+```
+
+```{r}
+# ============================================================
+# Build Comparison Summary — Word Document
+#
+# Run this AFTER multi_poster_analysis.R has finished and
+# participant_one/ contains all poster subfolders + summary_stats.csv
+#
+# Produces: participant_one/Gaze_Comparison_Summary.docx
+#   - One page per poster: heatmap image + stats + auto-written
+#     interpretation of whether attention was text-, image-, or
+#     color-driven
+#   - A final comparison table across all posters
+# ============================================================
+
+# install.packages(c("officer", "flextable", "dplyr"))
+
+library(officer)
+library(flextable)
+library(dplyr)
+
+OUTPUT_ROOT <- "participant_one"
+summary_df  <- read.csv(file.path(OUTPUT_ROOT, "summary_stats.csv"))
+
+# ── Helper: classify where on the poster attention concentrated ──
+# This is a simple positional heuristic based on the longest fixation's
+# location, normalised to the poster's own dimensions. It does NOT know
+# what's "text" vs "image" vs "color" in the artwork itself — that
+# requires you to look at the heatmap and confirm/adjust the wording.
+# The script writes a starting interpretation; edit the .docx afterwards
+# if the auto-classification doesn't match what you see visually.
+
+classify_region <- function(x_norm, y_norm) {
+  horiz <- if (x_norm < 0.33) "left" else if (x_norm > 0.66) "right" else "center"
+  vert  <- if (y_norm < 0.33) "upper" else if (y_norm > 0.66) "lower" else "middle"
+  if (horiz == "center" && vert == "middle") {
+    "the center of the composition"
+  } else {
+    paste(vert, horiz, "region")
+  }
+}
+
+summary_df <- summary_df %>%
+  mutate(
+    x_norm = Longest_Fix_X / Image_Width,
+    y_norm = Longest_Fix_Y / Image_Height,
+    region = mapply(classify_region, x_norm, y_norm)
+  )
+
+# ── Build the document ────────────────────────────────────────
+
+doc <- read_docx()
+
+doc <- doc %>%
+  body_add_par("Eye-Tracking Gaze Analysis", style = "heading 1") %>%
+  body_add_par("Participant One — Comparison Across All Posters", style = "heading 2") %>%
+  body_add_par("") %>%
+  body_add_par(paste0(
+    "This report summarizes where Participant One looked while viewing ",
+    nrow(summary_df), " poster designs. For each poster, fixation data ",
+    "(where the eye paused) was used to identify the area that received ",
+    "the most sustained attention, measured by the single longest fixation ",
+    "and total dwell time. A heatmap is included for each poster showing ",
+    "the overall distribution of visual attention."
+  )) %>%
+  body_add_par("") %>%
+  body_add_par(paste0(
+    "Note: the region label and interpretation below are generated from ",
+    "fixation coordinates only. They describe WHERE on the poster ",
+    "attention concentrated (e.g. upper-left, center), not WHAT was ",
+    "there. Review each heatmap image to confirm whether that region ",
+    "contained text, a photograph/illustration, or a strong color block, ",
+    "and adjust the interpretation text if needed."
+  )) %>%
+  body_add_break()
+
+# ── One section per poster ──
+
+for (i in seq_len(nrow(summary_df))) {
+
+  row <- summary_df[i, ]
+  folder_name <- gsub("[^A-Za-z0-9]+", "_", row$Poster)
+  folder_name <- gsub("_+", "_", folder_name)
+  folder_name <- gsub("^_|_$", "", folder_name)
+  heatmap_path <- file.path(OUTPUT_ROOT, folder_name, "heatmap_plot.png")
+  scanpath_path <- file.path(OUTPUT_ROOT, folder_name, "scanpath_plot.png")
+
+  doc <- doc %>%
+    body_add_par(row$Poster, style = "heading 2")
+
+  if (file.exists(heatmap_path)) {
+    doc <- doc %>%
+      body_add_img(src = heatmap_path, width = 5.5, height = 3.5,
+                  style = "centered")
+  } else {
+    doc <- doc %>%
+      body_add_par("[Heatmap image not found — run multi_poster_analysis.R first]")
+  }
+
+  doc <- doc %>%
+    body_add_par("") %>%
+    body_add_par(paste0(
+      "Viewing time: ", round(row$Viewing_Duration_ms / 1000, 1), " seconds  |  ",
+      "Fixations: ", row$N_Fixations, "  |  ",
+      "Total time fixating: ", round(row$Total_Fixation_ms / 1000, 1), " seconds  |  ",
+      "Average fixation: ", row$Mean_Fixation_ms, " ms"
+    )) %>%
+    body_add_par(paste0(
+      "Longest single fixation: ", row$Longest_Fixation_ms, " ms, located in the ",
+      row$region, " of the poster (approx. position ",
+      row$Longest_Fix_X, ", ", row$Longest_Fix_Y, " px)."
+    )) %>%
+    body_add_par(paste0(
+      "Interpretation: Participant One's most sustained attention on this ",
+      "poster was directed at the ", row$region, ". [EDIT: state here whether ",
+      "this area contains body text, a headline/title, a photograph or ",
+      "illustration, or a dominant color block, based on the heatmap above ",
+      "and the original poster image.]"
+    )) %>%
+    body_add_break()
+}
+
+# ── Final comparison table across all posters ──
+
+doc <- doc %>%
+  body_add_par("Cross-Poster Comparison", style = "heading 1") %>%
+  body_add_par(paste0(
+    "The table below ranks posters by total fixation time, showing which ",
+    "designs captured the most sustained visual attention from ",
+    "Participant One overall."
+  )) %>%
+  body_add_par("")
+
+comparison_table <- summary_df %>%
+  arrange(desc(Total_Fixation_ms)) %>%
+  transmute(
+    Poster              = Poster,
+    `Viewing Time (s)`  = round(Viewing_Duration_ms / 1000, 1),
+    `Fixations`         = N_Fixations,
+    `Total Fix. Time (s)` = round(Total_Fixation_ms / 1000, 1),
+    `Avg Fixation (ms)` = Mean_Fixation_ms,
+    `Longest Fix. (ms)` = Longest_Fixation_ms,
+    `Attention Region`  = region
+  )
+
+ft <- flextable(comparison_table) %>%
+  theme_box() %>%
+  autofit() %>%
+  fontsize(size = 9, part = "all") %>%
+  bold(part = "header")
+
+doc <- doc %>%
+  body_add_flextable(ft) %>%
+  body_add_par("") %>%
+  body_add_par(paste0(
+    "Summary: Participant One spent the most total fixation time on '",
+    comparison_table$Poster[1], "' (", comparison_table$`Total Fix. Time (s)`[1],
+    " seconds), with the longest single fixation occurring in the ",
+    comparison_table$`Attention Region`[1], ". The poster with the least ",
+    "sustained attention was '", comparison_table$Poster[nrow(comparison_table)],
+    "' (", comparison_table$`Total Fix. Time (s)`[nrow(comparison_table)],
+    " seconds)."
+  )) %>%
+  body_add_par("") %>%
+  body_add_par(paste0(
+    "[EDIT: Review the 'Attention Region' column above across all posters. ",
+    "If most longest-fixation regions cluster in areas with large text ",
+    "blocks, the participant favored TEXT. If they cluster on photos, ",
+    "illustrations, or central imagery, the participant favored IMAGES. ",
+    "If specific bright/saturated color blocks (e.g. the green and red ",
+    "patches in the David Carson poster) repeatedly attract the longest ",
+    "fixations across multiple designs, COLOR was the dominant draw. ",
+    "Write your final conclusion here once you've looked through all the ",
+    "heatmaps.]"
+  ))
+
+print(doc, target = file.path(OUTPUT_ROOT, "Gaze_Comparison_Summary.docx"))
+
+cat("\n✔ Saved:", file.path(OUTPUT_ROOT, "Gaze_Comparison_Summary.docx"), "\n")
+```
 
 
 
