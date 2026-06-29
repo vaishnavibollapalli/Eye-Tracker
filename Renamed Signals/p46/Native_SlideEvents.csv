@@ -1,0 +1,139 @@
+﻿9.3.23.0
+#HEADER
+SlideEvents
+SlideEvents
+
+
+%7b%22SlideShowStartDateTime%22%3a%222023-10-24T17%3a32%3a29.3617104Z%22%2c%22TimeZone%22%3a%22Eastern+Standard+Time%3b-300%3b(UTC-05%3a00)+Eastern+Time+(US+%26+Canada)%3bEastern+Standard+Time%3bEastern+Daylight+Time%3b%5b01%3a01%3a0001%3b12%3a31%3a2006%3b60%3b%5b0%3b02%3a00%3a00%3b4%3b1%3b0%3b%5d%3b%5b0%3b02%3a00%3a00%3b10%3b5%3b0%3b%5d%3b%5d%5b01%3a01%3a2007%3b12%3a31%3a9999%3b60%3b%5b0%3b02%3a00%3a00%3b3%3b2%3b0%3b%5d%3b%5b0%3b02%3a00%3a00%3b11%3b1%3b0%3b%5d%3b%5d%3b%22%7d
+#METADATA
+FieldName,SlideEvent,Timestamp,StimType,Duration,CollectionPhase,SourceStimuliName
+DataType,String,Double,String,Double,String,String
+Description,Slide & Media events: Start/Stop,iMotions timestamp,Type of stimulus,Stimulus duration fx video length,Reason slide was changed,Name of stimulus
+Category,Slideshow,Timestamp,Slideshow,Slideshow,Slideshow,Slideshow
+Provided By,iMotions,,iMotions,iMotions,iMotions,iMotions
+Channel identifier,SE_SlideEvent,,SE_StimulusType,SE_Duration,SE_CollectionPhase,SE_SourceStimuliName
+Unit,,Millisecond,,Millisecond,,
+Short unit,,,,ms,,
+#DATA
+RowNumber,SlideEvent,Timestamp,StimType,Duration,CollectionPhase,SourceStimuliName
+0,StartSlide,119.7791,TestImage,16000,StimuliDisplay,Ella Rosenblatt- 2021
+1,StartMedia,166.40520000000001,TestImage,16000,StimuliDisplay,Ella Rosenblatt- 2021
+2,EndMedia,16164.6841,TestImage,16000,StimuliDisplay,Ella Rosenblatt- 2021
+3,EndSlide,16164.6841,TestImage,16000,StimuliDisplay,Ella Rosenblatt- 2021
+4,StartSlide,16165.6828,TestImage,3000000,StimuliDisplay,ellasurveynew
+5,StartMedia,16246.5357,TestImage,3000000,StimuliDisplay,ellasurveynew
+6,EndMedia,53926.190300000002,TestImage,3000000,StimuliDisplay,ellasurveynew
+7,EndSlide,53926.190300000002,TestImage,3000000,StimuliDisplay,ellasurveynew
+8,StartSlide,53929.246899999998,TestImage,16000,StimuliDisplay,Iris Chung- 2015
+9,StartMedia,54031.6705,TestImage,16000,StimuliDisplay,Iris Chung- 2015
+10,EndMedia,70023.432000000001,TestImage,16000,StimuliDisplay,Iris Chung- 2015
+11,EndSlide,70023.432000000001,TestImage,16000,StimuliDisplay,Iris Chung- 2015
+12,StartSlide,70025.419399999999,TestImage,3000000,StimuliDisplay,Iris poster survey
+13,StartMedia,70079.291599999997,TestImage,3000000,StimuliDisplay,Iris poster survey
+14,EndMedia,94474.345600000001,TestImage,3000000,StimuliDisplay,Iris poster survey
+15,EndSlide,94474.345600000001,TestImage,3000000,StimuliDisplay,Iris poster survey
+16,StartSlide,94477.336899999995,TestImage,16000,StimuliDisplay,Sean Alatorre
+17,StartMedia,94560.519899999999,TestImage,16000,StimuliDisplay,Sean Alatorre
+18,EndMedia,110557.4246,TestImage,16000,StimuliDisplay,Sean Alatorre
+19,EndSlide,110557.4246,TestImage,16000,StimuliDisplay,Sean Alatorre
+20,StartSlide,110559.4179,TestImage,3000000,StimuliDisplay,new try
+21,StartMedia,110598.8383,TestImage,3000000,StimuliDisplay,new try
+22,EndMedia,152956.05840000001,TestImage,3000000,StimuliDisplay,new try
+23,EndSlide,152956.05840000001,TestImage,3000000,StimuliDisplay,new try
+24,StartSlide,152959.04819999999,TestImage,16000,StimuliDisplay,David Carson - 1990
+25,StartMedia,153128.59210000001,TestImage,16000,StimuliDisplay,David Carson - 1990
+26,EndMedia,169118.22229999999,TestImage,16000,StimuliDisplay,David Carson - 1990
+27,EndSlide,169118.22229999999,TestImage,16000,StimuliDisplay,David Carson - 1990
+28,StartSlide,169120.29319999999,TestImage,3000000,StimuliDisplay,Carson2 survey
+29,StartMedia,169159.0931,TestImage,3000000,StimuliDisplay,Carson2 survey
+30,EndMedia,191373.55970000001,TestImage,3000000,StimuliDisplay,Carson2 survey
+31,EndSlide,191373.55970000001,TestImage,3000000,StimuliDisplay,Carson2 survey
+32,StartSlide,191375.552,TestImage,16000,StimuliDisplay,Jan Tschichold-1938-Der
+33,StartMedia,191508.4865,TestImage,16000,StimuliDisplay,Jan Tschichold-1938-Der
+34,EndMedia,207508.2427,TestImage,16000,StimuliDisplay,Jan Tschichold-1938-Der
+35,EndSlide,207508.2427,TestImage,16000,StimuliDisplay,Jan Tschichold-1938-Der
+36,StartSlide,207510.2347,TestImage,3000000,StimuliDisplay,Jantwosurvey
+37,StartMedia,207552.09580000001,TestImage,3000000,StimuliDisplay,Jantwosurvey
+38,EndMedia,231109.48019999999,TestImage,3000000,StimuliDisplay,Jantwosurvey
+39,EndSlide,231109.48019999999,TestImage,3000000,StimuliDisplay,Jantwosurvey
+40,StartSlide,231112.47140000001,TestImage,16000,StimuliDisplay,Jan Tschichold-1927-Die Frau ohne Namen
+41,StartMedia,231250.71669999999,TestImage,16000,StimuliDisplay,Jan Tschichold-1927-Die Frau ohne Namen
+42,EndMedia,247242.37030000001,TestImage,16000,StimuliDisplay,Jan Tschichold-1927-Die Frau ohne Namen
+43,EndSlide,247242.37030000001,TestImage,16000,StimuliDisplay,Jan Tschichold-1927-Die Frau ohne Namen
+44,StartSlide,247244.36360000001,TestImage,3000000,StimuliDisplay,jansurvey
+45,StartMedia,247293.39850000001,TestImage,3000000,StimuliDisplay,jansurvey
+46,EndMedia,281221.49900000001,TestImage,3000000,StimuliDisplay,jansurvey
+47,EndSlide,281221.49900000001,TestImage,3000000,StimuliDisplay,jansurvey
+48,StartSlide,281224.49089999998,TestImage,16000,StimuliDisplay,Barry Ceck - 1988
+49,StartMedia,281336.8737,TestImage,16000,StimuliDisplay,Barry Ceck - 1988
+50,EndMedia,297337.20289999997,TestImage,16000,StimuliDisplay,Barry Ceck - 1988
+51,EndSlide,297337.20289999997,TestImage,16000,StimuliDisplay,Barry Ceck - 1988
+52,StartSlide,297339.17609999998,TestImage,3000000,StimuliDisplay,barry survey
+53,StartMedia,297377.40970000002,TestImage,3000000,StimuliDisplay,barry survey
+54,EndMedia,322748.2268,TestImage,3000000,StimuliDisplay,barry survey
+55,EndSlide,322748.2268,TestImage,3000000,StimuliDisplay,barry survey
+56,StartSlide,322752.21659999999,TestImage,16000,StimuliDisplay,"Paul Rand, 1947"
+57,StartMedia,322929.7009,TestImage,16000,StimuliDisplay,"Paul Rand, 1947"
+58,EndMedia,338929.46779999998,TestImage,16000,StimuliDisplay,"Paul Rand, 1947"
+59,EndSlide,338929.46779999998,TestImage,16000,StimuliDisplay,"Paul Rand, 1947"
+60,StartSlide,338932.5258,TestImage,3000000,StimuliDisplay,Rand survey
+61,StartMedia,338980.68229999999,TestImage,3000000,StimuliDisplay,Rand survey
+62,EndMedia,380260.61459999997,TestImage,3000000,StimuliDisplay,Rand survey
+63,EndSlide,380261.64279999997,TestImage,3000000,StimuliDisplay,Rand survey
+64,StartSlide,380265.5992,TestImage,16000,StimuliDisplay,Armin Hofman- 1955
+65,StartMedia,380404.87910000002,TestImage,16000,StimuliDisplay,Armin Hofman- 1955
+66,EndMedia,396398.4915,TestImage,16000,StimuliDisplay,Armin Hofman- 1955
+67,EndSlide,396398.4915,TestImage,16000,StimuliDisplay,Armin Hofman- 1955
+68,StartSlide,396401.49810000003,TestImage,3000000,StimuliDisplay,armin survey
+69,StartMedia,396448.32290000003,TestImage,3000000,StimuliDisplay,armin survey
+70,EndMedia,424140.83870000002,TestImage,3000000,StimuliDisplay,armin survey
+71,EndSlide,424140.83870000002,TestImage,3000000,StimuliDisplay,armin survey
+72,StartSlide,424143.83000000002,TestImage,16000,StimuliDisplay,David Carson
+73,StartMedia,424289.6153,TestImage,16000,StimuliDisplay,David Carson
+74,EndMedia,440293.72690000001,TestImage,16000,StimuliDisplay,David Carson
+75,EndSlide,440293.72690000001,TestImage,16000,StimuliDisplay,David Carson
+76,StartSlide,440294.7255,TestImage,3000000,StimuliDisplay,Carson survey
+77,StartMedia,440351.30790000001,TestImage,3000000,StimuliDisplay,Carson survey
+78,EndMedia,469628.30209999997,TestImage,3000000,StimuliDisplay,Carson survey
+79,EndSlide,469628.30209999997,TestImage,3000000,StimuliDisplay,Carson survey
+80,StartSlide,469631.30900000001,TestImage,16000,StimuliDisplay,Paula Scher - 1995
+81,StartMedia,469724.2316,TestImage,16000,StimuliDisplay,Paula Scher - 1995
+82,EndMedia,485713.32010000001,TestImage,16000,StimuliDisplay,Paula Scher - 1995
+83,EndSlide,485713.32010000001,TestImage,16000,StimuliDisplay,Paula Scher - 1995
+84,StartSlide,485717.3849,TestImage,3000000,StimuliDisplay,Paula survey
+85,StartMedia,485753.01329999999,TestImage,3000000,StimuliDisplay,Paula survey
+86,EndMedia,514844.28169999999,TestImage,3000000,StimuliDisplay,Paula survey
+87,EndSlide,514844.28169999999,TestImage,3000000,StimuliDisplay,Paula survey
+88,StartSlide,514847.27159999998,TestImage,16000,StimuliDisplay,Scott Barry- 2010
+89,StartMedia,514953.97139999998,TestImage,16000,StimuliDisplay,Scott Barry- 2010
+90,EndMedia,530947.6041,TestImage,16000,StimuliDisplay,Scott Barry- 2010
+91,EndSlide,530947.6041,TestImage,16000,StimuliDisplay,Scott Barry- 2010
+92,StartSlide,530950.65390000003,TestImage,3000000,StimuliDisplay,Scot poster survey
+93,StartMedia,530989.54760000005,TestImage,3000000,StimuliDisplay,Scot poster survey
+94,EndMedia,553726.44660000002,TestImage,3000000,StimuliDisplay,Scot poster survey
+95,EndSlide,553726.44660000002,TestImage,3000000,StimuliDisplay,Scot poster survey
+96,StartSlide,553729.4362,TestImage,16000,StimuliDisplay,Joost Schmidt-1923-Saatliches
+97,StartMedia,553870.21669999999,TestImage,16000,StimuliDisplay,Joost Schmidt-1923-Saatliches
+98,EndMedia,569871.09990000003,TestImage,16000,StimuliDisplay,Joost Schmidt-1923-Saatliches
+99,EndSlide,569871.09990000003,TestImage,16000,StimuliDisplay,Joost Schmidt-1923-Saatliches
+100,StartSlide,569873.09290000005,TestImage,3000000,StimuliDisplay,joost survey
+101,StartMedia,569918.14769999997,TestImage,3000000,StimuliDisplay,joost survey
+102,EndMedia,588944.74639999995,TestImage,3000000,StimuliDisplay,joost survey
+103,EndSlide,588944.74639999995,TestImage,3000000,StimuliDisplay,joost survey
+104,StartSlide,588947.67319999996,TestImage,16000,StimuliDisplay,bookcover
+105,StartMedia,589119.59230000002,TestImage,16000,StimuliDisplay,bookcover
+106,EndMedia,605117.23270000005,TestImage,16000,StimuliDisplay,bookcover
+107,EndSlide,605117.23270000005,TestImage,16000,StimuliDisplay,bookcover
+108,StartSlide,605118.23499999999,TestImage,3000000,StimuliDisplay,bookcovernew
+109,StartMedia,605156.11010000005,TestImage,3000000,StimuliDisplay,bookcovernew
+110,EndMedia,625916.94110000005,TestImage,3000000,StimuliDisplay,bookcovernew
+111,EndSlide,625916.94110000005,TestImage,3000000,StimuliDisplay,bookcovernew
+112,StartSlide,625920.97790000006,TestImage,16000,StimuliDisplay,nancy poster
+113,StartMedia,626048.37080000003,TestImage,16000,StimuliDisplay,nancy poster
+114,EndMedia,642040.05590000004,TestImage,16000,StimuliDisplay,nancy poster
+115,EndSlide,642040.05590000004,TestImage,16000,StimuliDisplay,nancy poster
+116,StartSlide,642041.05260000005,TestImage,3000000,StimuliDisplay,nancy poster Q
+117,StartMedia,642076.93409999995,TestImage,3000000,StimuliDisplay,nancy poster Q
+118,EndMedia,665109.04200000002,TestImage,3000000,StimuliDisplay,nancy poster Q
+119,EndSlide,665109.04200000002,TestImage,3000000,StimuliDisplay,nancy poster Q
+120,EndSlideshow,665620.32709999999,,,,
