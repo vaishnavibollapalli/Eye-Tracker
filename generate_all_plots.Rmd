@@ -1,0 +1,383 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+# ============================================================
+# Eye Tracking — Multi-Poster Multi-Participant Plot Generator
+# ============================================================
+# Folder structure output:
+#   output/
+#     poster_ArminHofman/
+#       p1/
+#         heatmap_plot.png
+#         gaze_path_plot.png
+#         scanpath_plot.png
+#         gaze_animation.gif
+#       p2/ ...
+#     poster_BarryCeck/ ...
+
+library(tidyverse)
+library(ggplot2)
+library(jpeg)
+library(png)
+library(grid)
+library(gridExtra)
+library(MASS)       # for kde2d (heatmap)
+library(gganimate)  # for gif
+library(gifski)     # gif renderer
+
+# ============================================================
+# CONFIGURATION — adjust these paths if needed
+# ============================================================
+ROOT         <- "."                   # repo root; run from Eye-Tracker/
+SIGNALS_DIR  <- file.path(ROOT, "Renamed Signals")
+POSTERS_DIR  <- file.path(ROOT, "posters")
+OUTPUT_DIR   <- file.path(ROOT, "output")
+
+# Column name mapping — adjust to match your actual CSV columns
+COL_X        <- "ET_GazeLeftx"        # raw gaze X
+COL_Y        <- "ET_GazeLefty"        # raw gaze Y
+COL_TIME     <- "Timestamp"           # time in ms
+COL_FIX_X   <- "ET_FixationPointX"   # fixation X (for scanpath)
+COL_FIX_Y   <- "ET_FixationPointY"   # fixation Y
+COL_FIX_DUR <- "ET_FixationDuration" # fixation duration ms
+COL_FIX_IDX <- "ET_FixationIndex"    # fixation order index
+COL_SLIDE   <- "SlideEvent"          # slide/stimulus name column (in SlideEvents CSV)
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+#' Load the background poster image as a raster grob
+load_poster <- function(poster_path) {
+  ext <- tolower(tools::file_ext(poster_path))
+  img <- if (ext %in% c("jpg", "jpeg")) readJPEG(poster_path) else readPNG(poster_path)
+  rasterGrob(img, width = unit(1, "npc"), height = unit(1, "npc"), interpolate = TRUE)
+}
+
+#' Load and filter gaze data for one participant + one poster
+#' Returns a data frame with gaze/fixation columns
+load_participant_data <- function(participant_dir, poster_name) {
+  # Read the main ET_RExtAPI file
+  et_file <- list.files(participant_dir, pattern = "ET_RExtAPI.*\\.csv$",
+                        full.names = TRUE, ignore.case = TRUE)
+  slide_file <- list.files(participant_dir, pattern = "Native_SlideEvents.*\\.csv$",
+                           full.names = TRUE, ignore.case = TRUE)
+
+  if (length(et_file) == 0) {
+    warning("No ET_RExtAPI CSV found in: ", participant_dir)
+    return(NULL)
+  }
+
+  df <- read_csv(et_file[1], show_col_types = FALSE)
+
+  # If a SlideEvents file exists, use it to get timestamp range for this poster
+  if (length(slide_file) > 0) {
+    slides <- read_csv(slide_file[1], show_col_types = FALSE)
+
+    # Try to find the row matching this poster (flexible name match)
+    poster_rows <- slides %>%
+      filter(str_detect(tolower(.data[[names(slides)[1]]]),
+                        tolower(str_replace_all(poster_name, "[^a-zA-Z0-9]", ""))))
+
+    if (nrow(poster_rows) >= 1) {
+      # Assumes slides have start/end time columns — adapt column names as needed
+      time_cols <- names(slides)
+      # Common iMotions column names for slide timing:
+      start_col <- intersect(c("SlideStartTime", "EventTime", "Timestamp"), time_cols)[1]
+      end_col   <- intersect(c("SlideEndTime", "EventEndTime"), time_cols)[1]
+
+      if (!is.na(start_col) && !is.na(end_col)) {
+        t_start <- poster_rows[[start_col]][1]
+        t_end   <- poster_rows[[end_col]][1]
+        df <- df %>% filter(.data[[COL_TIME]] >= t_start & .data[[COL_TIME]] <= t_end)
+      }
+    }
+  }
+
+  # Drop rows with missing gaze
+  df <- df %>%
+    filter(!is.na(.data[[COL_X]]), !is.na(.data[[COL_Y]]),
+           .data[[COL_X]] > 0, .data[[COL_Y]] > 0)
+
+  df
+}
+
+# ============================================================
+# PLOT 1 — Raw Gaze Path (colour = time progression)
+# ============================================================
+plot_gaze_path <- function(df, bg_grob, img_w, img_h, out_path) {
+  # Normalise coordinates to [0,1] if they are in pixels
+  df <- df %>%
+    mutate(
+      x_norm = .data[[COL_X]] / img_w,
+      y_norm = 1 - (.data[[COL_Y]] / img_h),  # flip Y (screen vs plot coords)
+      t_norm = (.data[[COL_TIME]] - min(.data[[COL_TIME]])) /
+               (max(.data[[COL_TIME]]) - min(.data[[COL_TIME]]))
+    )
+
+  p <- ggplot(df, aes(x = x_norm, y = y_norm, colour = .data[[COL_TIME]])) +
+    annotation_custom(bg_grob, xmin = 0, xmax = 1, ymin = 0, ymax = 1) +
+    geom_path(linewidth = 0.6, alpha = 0.85) +
+    geom_point(size = 0.8, alpha = 0.5) +
+    scale_colour_viridis_c(option = "plasma", name = "Time (ms)",
+                           labels = scales::comma) +
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    coord_fixed(ratio = img_h / img_w) +
+    labs(title = "Eye Tracking \u2014 Raw Gaze Path",
+         subtitle = "Colour = time progression (early \u2192 late)") +
+    theme_void() +
+    theme(
+      plot.background  = element_rect(fill = "black", colour = NA),
+      plot.title       = element_text(colour = "white", hjust = 0.5, size = 14, face = "bold"),
+      plot.subtitle    = element_text(colour = "grey70", hjust = 0.5, size = 9),
+      legend.position  = "bottom",
+      legend.title     = element_text(colour = "white", size = 9),
+      legend.text      = element_text(colour = "white", size = 8),
+      legend.key.width = unit(2, "cm")
+    )
+
+  ggsave(out_path, p, width = 13, height = 9, dpi = 150, bg = "black")
+  message("  Saved: ", out_path)
+}
+
+# ============================================================
+# PLOT 2 — Gaze Density Heatmap
+# ============================================================
+plot_heatmap <- function(df, bg_grob, img_w, img_h, out_path) {
+  df <- df %>%
+    mutate(
+      x_norm = .data[[COL_X]] / img_w,
+      y_norm = 1 - (.data[[COL_Y]] / img_h)
+    ) %>%
+    filter(x_norm >= 0, x_norm <= 1, y_norm >= 0, y_norm <= 1)
+
+  # KDE
+  kde <- kde2d(df$x_norm, df$y_norm, n = 200,
+               lims = c(0, 1, 0, 1))
+  kde_df <- expand.grid(x = kde$x, y = kde$y) %>%
+    mutate(density = as.vector(kde$z))
+
+  p <- ggplot() +
+    annotation_custom(bg_grob, xmin = 0, xmax = 1, ymin = 0, ymax = 1) +
+    geom_raster(data = kde_df, aes(x = x, y = y, fill = density), alpha = 0.65) +
+    scale_fill_gradientn(
+      colours = c("transparent", "#0000FF44", "#00FFFF88",
+                  "#00FF00CC", "#FFFF00EE", "#FF0000FF"),
+      name = "Gaze Density"
+    ) +
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    coord_fixed(ratio = img_h / img_w) +
+    labs(title = "Eye Tracking \u2014 Gaze Density Heatmap",
+         subtitle = "Warmer colours = more time spent looking") +
+    theme_void() +
+    theme(
+      plot.background  = element_rect(fill = "black", colour = NA),
+      plot.title       = element_text(colour = "white", hjust = 0.5, size = 14, face = "bold"),
+      plot.subtitle    = element_text(colour = "grey70", hjust = 0.5, size = 9),
+      legend.position  = "bottom",
+      legend.title     = element_text(colour = "white", size = 9),
+      legend.text      = element_text(colour = "white", size = 8),
+      legend.key.width = unit(2, "cm")
+    )
+
+  ggsave(out_path, p, width = 13, height = 9, dpi = 150, bg = "black")
+  message("  Saved: ", out_path)
+}
+
+# ============================================================
+# PLOT 3 — Scanpath (fixations + saccades)
+# ============================================================
+plot_scanpath <- function(df, bg_grob, img_w, img_h, out_path) {
+  # Check fixation columns exist
+  needed <- c(COL_FIX_X, COL_FIX_Y, COL_FIX_DUR, COL_FIX_IDX)
+  missing <- needed[!needed %in% names(df)]
+  if (length(missing) > 0) {
+    warning("Scanpath: missing columns: ", paste(missing, collapse = ", "))
+    return(invisible(NULL))
+  }
+
+  fix_df <- df %>%
+    select(fix_x   = all_of(COL_FIX_X),
+           fix_y   = all_of(COL_FIX_Y),
+           dur     = all_of(COL_FIX_DUR),
+           fix_idx = all_of(COL_FIX_IDX)) %>%
+    filter(!is.na(fix_x), !is.na(fix_y), !is.na(fix_idx)) %>%
+    distinct(fix_idx, .keep_all = TRUE) %>%
+    arrange(fix_idx) %>%
+    mutate(
+      x_norm = fix_x / img_w,
+      y_norm = 1 - (fix_y / img_h)
+    ) %>%
+    filter(x_norm >= 0, x_norm <= 1, y_norm >= 0, y_norm <= 1)
+
+  p <- ggplot(fix_df, aes(x = x_norm, y = y_norm)) +
+    annotation_custom(bg_grob, xmin = 0, xmax = 1, ymin = 0, ymax = 1) +
+    # saccade lines
+    geom_path(colour = "white", linewidth = 0.4, alpha = 0.7) +
+    # fixation circles sized by duration
+    geom_point(aes(size = dur), colour = "#56B4E9", alpha = 0.75, shape = 16) +
+    # fixation order labels
+    geom_text(aes(label = fix_idx), colour = "white", size = 2.2, fontface = "bold") +
+    scale_size_continuous(name = "Fixation Duration (ms)",
+                          range = c(4, 14),
+                          breaks = c(100, 150, 200, 250)) +
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    coord_fixed(ratio = img_h / img_w) +
+    labs(title = "Eye Tracking \u2014 Scanpath",
+         subtitle = "Circles = fixation duration | Lines = saccades | Numbers = fixation order") +
+    theme_void() +
+    theme(
+      plot.background  = element_rect(fill = "black", colour = NA),
+      plot.title       = element_text(colour = "white", hjust = 0.5, size = 14, face = "bold"),
+      plot.subtitle    = element_text(colour = "grey70", hjust = 0.5, size = 9),
+      legend.position  = "bottom",
+      legend.title     = element_text(colour = "white", size = 9),
+      legend.text      = element_text(colour = "white", size = 8)
+    )
+
+  ggsave(out_path, p, width = 13, height = 9, dpi = 150, bg = "black")
+  message("  Saved: ", out_path)
+}
+
+# ============================================================
+# PLOT 4 — Gaze Animation (GIF)
+# ============================================================
+plot_animation <- function(df, bg_grob, img_w, img_h, out_path) {
+  # Bin time into frames to keep gif manageable
+  n_frames <- 80
+
+  df_anim <- df %>%
+    mutate(
+      x_norm  = .data[[COL_X]] / img_w,
+      y_norm  = 1 - (.data[[COL_Y]] / img_h),
+      t_rank  = ntile(.data[[COL_TIME]], n_frames)
+    ) %>%
+    filter(x_norm >= 0, x_norm <= 1, y_norm >= 0, y_norm <= 1)
+
+  # Cumulative path up to each frame
+  anim_frames <- map_dfr(seq_len(n_frames), function(f) {
+    df_anim %>% filter(t_rank <= f) %>% mutate(frame = f)
+  })
+
+  current_dot <- df_anim %>% rename(frame = t_rank)
+
+  p <- ggplot() +
+    annotation_custom(bg_grob, xmin = 0, xmax = 1, ymin = 0, ymax = 1) +
+    geom_path(data = anim_frames,
+              aes(x = x_norm, y = y_norm, group = 1, colour = frame),
+              linewidth = 0.7, alpha = 0.8) +
+    geom_point(data = current_dot,
+               aes(x = x_norm, y = y_norm),
+               colour = "white", size = 3, alpha = 0.9) +
+    scale_colour_viridis_c(option = "plasma", guide = "none") +
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    coord_fixed(ratio = img_h / img_w) +
+    labs(title = "Eye Tracking \u2014 Gaze Animation") +
+    theme_void() +
+    theme(
+      plot.background = element_rect(fill = "black", colour = NA),
+      plot.title      = element_text(colour = "white", hjust = 0.5, size = 14, face = "bold")
+    ) +
+    transition_time(frame) +
+    ease_aes("linear")
+
+  anim <- animate(p,
+                  nframes    = n_frames,
+                  fps        = 12,
+                  width      = 1300,
+                  height     = 900,
+                  renderer   = gifski_renderer(),
+                  bg         = "black")
+
+  anim_save(out_path, anim)
+  message("  Saved: ", out_path)
+}
+
+# ============================================================
+# MAIN LOOP
+# ============================================================
+run_all <- function() {
+  # Discover posters
+  poster_files <- list.files(POSTERS_DIR, pattern = "\\.(jpg|jpeg|png|JPG|JPEG|PNG)$",
+                             full.names = TRUE)
+  poster_names <- tools::file_path_sans_ext(basename(poster_files))
+
+  # Discover participants (folders named p1, p2, ... inside Renamed Signals)
+  participant_dirs <- list.dirs(SIGNALS_DIR, recursive = FALSE)
+  participant_ids  <- basename(participant_dirs)
+
+  message("Found ", length(poster_files), " posters and ",
+          length(participant_dirs), " participants.\n")
+
+  for (pi in seq_along(poster_files)) {
+    poster_path <- poster_files[pi]
+    poster_name <- poster_names[pi]
+
+    message("=== Poster: ", poster_name, " ===")
+
+    # Load poster image and get dimensions
+    ext <- tolower(tools::file_ext(poster_path))
+    img <- if (ext %in% c("jpg", "jpeg")) readJPEG(poster_path) else readPNG(poster_path)
+    img_h <- dim(img)[1]
+    img_w <- dim(img)[2]
+    bg_grob <- rasterGrob(img, width = unit(1, "npc"), height = unit(1, "npc"),
+                          interpolate = TRUE)
+
+    for (di in seq_along(participant_dirs)) {
+      part_dir <- participant_dirs[di]
+      part_id  <- participant_ids[di]
+
+      message("  Participant: ", part_id)
+
+      # Output folder
+      out_folder <- file.path(OUTPUT_DIR,
+                              paste0("poster_", str_replace_all(poster_name, " ", "")),
+                              part_id)
+      dir.create(out_folder, recursive = TRUE, showWarnings = FALSE)
+
+      # Load data
+      df <- tryCatch(
+        load_participant_data(part_dir, poster_name),
+        error = function(e) { warning(e$message); NULL }
+      )
+
+      if (is.null(df) || nrow(df) < 10) {
+        message("    Skipping — insufficient data")
+        next
+      }
+
+      # Generate plots
+      tryCatch(plot_gaze_path(df, bg_grob, img_w, img_h,
+                              file.path(out_folder, "gaze_path_plot.png")),
+               error = function(e) warning("gaze_path: ", e$message))
+
+      tryCatch(plot_heatmap(df, bg_grob, img_w, img_h,
+                            file.path(out_folder, "heatmap_plot.png")),
+               error = function(e) warning("heatmap: ", e$message))
+
+      tryCatch(plot_scanpath(df, bg_grob, img_w, img_h,
+                             file.path(out_folder, "scanpath_plot.png")),
+               error = function(e) warning("scanpath: ", e$message))
+
+      tryCatch(plot_animation(df, bg_grob, img_w, img_h,
+                              file.path(out_folder, "gaze_animation.gif")),
+               error = function(e) warning("animation: ", e$message))
+    }
+  }
+
+  message("\nDone! All plots saved to: ", OUTPUT_DIR)
+}
+
+# Run it
+run_all()
+```
+
