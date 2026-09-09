@@ -1,147 +1,109 @@
-# Eye-Tracker: Gaze Visualization in R
+# Eye-Tracker: Gaze Visualization & Attention Analysis for Graphic Design Posters
 
-A set of R scripts that visualize eye-tracking data from a single subject viewing a stimulus image. Produces a static scanpath plot, a raw gaze path, a density heatmap, and a frame-by-frame animated Gaze replay — all overlaid on the original stimulus.
+An R-based pipeline that turns raw eye-tracking exports (iMotions / Smart Eye Aurora) into
+scanpath plots, gaze-density heatmaps, and animated gaze replays. The project started as a
+single-subject pilot on one poster and grew into a full study covering **15 graphic design
+posters across 48 participants**, with data-driven region-of-interest analysis on top.
+
+## Project History
+
+| Stage | What it covers |
+|-------|-----------------|
+| **Pilot** (`test/`, `Path_Visualization.Rmd`) | One participant, one poster (David Carson, 1990). Proved out the core visualization approach: scanpath, gaze path, heatmap, animated replay. |
+| **Single-participant, all posters** (`participant_one/`) | Same pipeline re-run across all 15 posters for one participant, plus a Word comparison summary (`Gaze_Comparison_Summary.docx`). |
+| **Full study** (`Renamed Signals/`, `output/`, `generate_all_plots.Rmd`) | All 15 posters × up to 48 participants. Produces per-participant plots, averaged/aggregated heatmaps per poster, and data-driven region (attention hotspot) analysis. Presented at the SURS Undergraduate Research Symposium at Georgia State University. |
 
 ## Repository Structure
 
 ```
 Eye-Tracker/
-│
-├── test1_F_S.csv                  # Fixation & saccade data (iMotions export)
-├── test1_gazetracking_clean.csv   # Raw gaze coordinates (cleaned)
-├── test1_gazetracking.csv         # Raw gaze coordinates (original, uncleaned)
-├── David Carson.jpg               # Stimulus image shown to the subject
-│
-├── scanpath_visualization.R       # Static plots (scanpath, gaze path, heatmap)
-├── scanpath_animation.R           # Animated gaze replay GIF
-│
+├── Renamed Signals/           # Raw per-participant iMotions exports (p1 … p48)
+├── posters/                   # 15 stimulus images (the posters shown to participants)
+├── participant_one/           # Single-participant pilot run across all 15 posters
+│   ├── <PosterName>/          #   scanpath, gaze path, heatmap, animated GIF per poster
+│   ├── ET_Eyetracker.csv      #   raw iMotions eye-tracker export
+│   ├── ET_RExtAPI-GazeAnalysis.csv
+│   ├── Native_SlideEvents.csv #   slide/poster timing (SourceStimuliName, StartSlide, Duration)
+│   ├── summary_stats.csv
+│   └── Gaze_Comparison_Summary.docx
+├── output/                    # Full 15-poster × 48-participant analysis
+│   ├── poster_<Name>/         #   per-poster folder: per-participant p1…p48 outputs +
+│   │                          #   averaged heatmaps (0-2s / 0-5s / 0-16s) and average gaze path/animation
+│   ├── DBSCAN output/         #   region analysis using the DBSCAN clustering variant
+│   ├── eye_tracking_analysis.R    # K-means region clustering pipeline (region stats, dwell time, viewing order)
+│   ├── eye_tracking_dbscan.R      # DBSCAN drop-in alternative to the K-means clustering step
+│   ├── Eye_Tracking_Poster.pptx
+│   ├── Eye_Tracking_Region_Analysis.docx
+│   ├── Methods_Visual.png / .pptx
+│   ├── Poster_Presentation_Content.docx
+│   └── Presentation_Script.docx
+├── test/                      # Original single-subject, single-poster pilot artifacts
+│   ├── test1_gazetracking.csv      # Raw gaze coordinates (original, uncleaned)
+│   ├── test1_gazetracking_clean.csv
+│   ├── test1_F&S.csv               # Fixation & saccade data (iMotions export)
+│   └── scanpath_plot.png / gaze_path_plot.png / heatmap_plot.png / gaze_animation.gif
+├── generate_all_plots.Rmd     # Multi-poster, multi-participant plot generator (reads Renamed Signals/ + posters/, writes output/)
+├── Path_Visualization.Rmd     # Original pilot notebook (single participant, single poster)
+├── Eye Tracker.Rproj
 └── README.md
 ```
 
 ## Data Files
 
-### `test1_F_S.csv` — Fixations & Saccades
-
-Exported from iMotions. Each row represents either a fixation event or a saccade event.
+### Raw iMotions exports (`Renamed Signals/`, `participant_one/`, `test/`)
 
 | Column | Description |
 |--------|-------------|
-| `Fixation Index by Stimulus` | Sequential fixation number (1, 2, 3...) |
-| `Fixation X` | Horizontal position of fixation on screen (pixels) |
-| `Fixation Y` | Vertical position of fixation on screen (pixels) |
-| `Fixation Duration` | How long the eye stayed at that point (milliseconds) |
-| `Saccade Index by Stimulus` | Sequential saccade number |
-| `Saccade Duration` | Duration of the eye movement (ms) |
-| `Saccade Amplitude` | Distance traveled during saccade (degrees of visual angle) |
-| `Saccade Direction` | Angle of eye movement (degrees, 0° = right) |
+| `Fixation X` / `Fixation Y` | Position of a fixation on screen (pixels) |
+| `Fixation Duration` | How long the eye stayed at that point (ms) |
+| `Saccade Duration` / `Saccade Amplitude` / `Saccade Direction` | Duration, distance, and angle of the eye movement between fixations |
+| `Gaze X` / `Gaze Y` | Continuous raw gaze position, sampled at ~120 Hz |
+| `Timestamp` | Time since recording started (ms) |
 
-**Subject stats:** 61 fixations, durations ranging from 66.7 ms to 283.3 ms.
-
-> **Fixation** = the eye is relatively still, actively processing information.  
+> **Fixation** = the eye is relatively still, actively processing information.
 > **Saccade** = the rapid jump between fixations.
 
----
+iMotions CSVs have multi-row metadata headers before the actual data starts, marked by a
+`#DATA` line (which can have a trailing comma). Slide/poster timing comes from
+`Native_SlideEvents.csv` via `SourceStimuliName` / `StartSlide` / `Duration`.
 
-### `test1_gazetracking_clean.csv` — Raw Gaze Data
+### `Native_SlideEvents.csv` — Poster Timing
 
-Cleaned version of the continuous gaze stream sampled at ~120 Hz (~8ms per sample).
-
-| Column | Description |
-|--------|-------------|
-| `Timestamp` | Time since recording started (milliseconds) |
-| `Gaze X` | Horizontal gaze position on screen (pixels) |
-| `Gaze Y` | Vertical gaze position on screen (pixels) |
-
-**Subject stats:** 2,042 samples. X range: 158–1718 px. Y range: 141–967 px. Screen resolution: 1920×1200.
-
-> Unlike the fixation file, this contains every raw sample including the movements between fixations.
-
----
+Used to slice each participant's continuous signal into per-poster windows.
 
 ## Scripts
 
-### `scanpath_visualization.R` — Three Static Plots
+### `generate_all_plots.Rmd` — Multi-Poster, Multi-Participant Pipeline
 
-Produces three PNG files saved to your working directory.
+Reads every participant's signal from `Renamed Signals/` and every stimulus from `posters/`,
+slices each participant's data per poster using `Native_SlideEvents.csv`, and writes four
+outputs per participant per poster into `output/poster_<Name>/pN/`:
 
-#### How it works
-
-**1. Load & filter data**
-```r
-fixations <- fs %>%
-  filter(!is.na(Fixation.X) & !is.na(Fixation.Y))
-```
-The F&S CSV has rows for both fixations and saccades. Since saccade rows have empty Fixation X/Y columns, filtering on those gives us only fixation events, ordered by their sequence number.
-
-**2. Y-axis flip**
-```r
-y_flip = img_h - y
-```
-Eye trackers place the origin (0,0) at the **top-left** of the screen with Y increasing downward. ggplot places the origin at the **bottom-left** with Y increasing upward. Without this flip, the plot would appear vertically mirrored.
-
-**3. Background image**
-```r
-annotation_raster(bg_img, xmin=0, xmax=img_w, ymin=0, ymax=img_h)
-```
-Renders the stimulus JPEG as a static pixel layer. All gaze coordinates are in the same pixel space, so no rescaling is needed.
-
-#### Output files
-
-| File | What it shows |
-|------|---------------|
+| Output | What it shows |
+|--------|---------------|
 | `scanpath_plot.png` | Numbered fixation circles connected by saccade lines. Circle size = fixation duration. |
 | `gaze_path_plot.png` | Continuous raw gaze trace coloured by time (early = dark, late = bright). |
 | `heatmap_plot.png` | 2D density heatmap — warmer colours where the eye spent the most time. |
+| `gaze_animation.gif` | Frame-by-frame replay of gaze position with a fading trail, overlaid on the poster. |
 
----
+It also produces per-poster **averaged** outputs across all participants
+(`average_gaze_path.png`, `average_gaze_animation.gif`, and heatmaps for 0-2s / 0-5s / 0-16s
+viewing windows).
 
-### `scanpath_animation.R` — "Through Their Eyes" Replay
+### `output/eye_tracking_analysis.R` and `output/eye_tracking_dbscan.R` — Region Analysis
 
-Produces `gaze_animation.gif` — a frame-by-frame replay of where the subject's eye was at every moment, with a fading trail behind the current gaze position.
+Data-driven attention-region clustering on top of the aggregated fixations: which parts of
+each poster draw attention first, how long they hold it, and in what order they're viewed.
+`eye_tracking_analysis.R` uses K-means (k chosen via silhouette score); `eye_tracking_dbscan.R`
+is a drop-in DBSCAN alternative that doesn't require specifying the number of regions up front
+and can leave sparse points unclustered as noise. Both were ported from a working Python
+(pandas/scikit-learn) pipeline — see the `# CHECK` comments in each file for spots worth
+verifying on a small participant subset before a full re-run.
 
-#### How it works
+### `Path_Visualization.Rmd` — Original Pilot Notebook
 
-**1. Frame index**
-```r
-gaze <- gaze %>% mutate(frame = row_number())
-```
-Each of the 2,042 gaze samples becomes one frame of the animation.
-
-**2. Fading trail**
-```r
-trail_length <- 20
-gaze_with_trail <- lapply(gaze$frame, function(f) {
-  start <- max(1, f - trail_length + 1)
-  slice <- gaze[start:f, ]
-  slice$age <- seq_len(nrow(slice))
-  ...
-})
-```
-For each frame, the last 20 gaze samples are collected. Each sample is assigned an `age` value (1 = oldest, 20 = current). Older points are rendered smaller and more transparent, creating a comet-tail effect.
-
-**3. Two point layers**
-- **Blue fading dots** — the trail (`alpha` and `size` controlled by `age`)
-- **White ring** — the current gaze position, always rendered on top at full opacity
-
-**4. gganimate**
-```r
-transition_manual(current_frame)
-```
-Steps through frames one at a time in order, producing a temporally accurate replay.
-
-#### Controlling playback speed
-
-```r
-animate(p, nframes = nrow(gaze), fps = 60, ...)
-```
-
-| FPS | Effect |
-|-----|--------|
-| `125` | Real-time (data sampled every ~8ms) |
-| `60` | Half speed — easier to follow |
-| `30` | Slow motion — good for analysis |
-
----
+The single-participant, single-poster notebook the rest of the pipeline grew out of. Useful as
+a minimal, fully worked example of the core visualization approach.
 
 ## Setup & Installation
 
@@ -152,28 +114,22 @@ animate(p, nframes = nrow(gaze), fps = 60, ...)
 ### Install required packages
 ```r
 install.packages(c(
-  "ggplot2",   # plotting
-  "jpeg",      # reading the background image
-  "grid",      # raster rendering
-  "dplyr",     # data wrangling
-  "scales",    # alpha/colour helpers
-  "ggrepel",   # non-overlapping labels
-  "gganimate", # animation
-  "gifski"     # GIF renderer
+  "tidyverse", "ggplot2", "jpeg", "png", "grid", "MASS",
+  "dplyr", "scales", "ggrepel", "gganimate", "gifski",
+  "readr", "tidyr", "magick", "cluster", "dbscan", "class"
 ))
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install("EBImage")
 ```
 
 ### Run
 
-1. Open `Eye Tracker.Rproj` in RStudio — this sets the working directory automatically
-2. Rename the F&S file if needed (iMotions exports it as `test1_F&S.csv`):
-```r
-file.rename("test1_F&S.csv", "test1_F_S.csv")
-```
-3. Run `scanpath_visualization.R` for the static plots (~5 seconds)
-4. Run `scanpath_animation.R` for the GIF (~1–2 minutes to render)
-
----
+1. Open `Eye Tracker.Rproj` in RStudio — this sets the working directory automatically.
+2. For the full study: run `generate_all_plots.Rmd` (reads `Renamed Signals/` + `posters/`,
+   writes `output/`).
+3. For region/attention analysis on top of the generated output: run
+   `output/eye_tracking_analysis.R`, optionally followed by `output/eye_tracking_dbscan.R`.
+4. For the original single-poster pilot: run `Path_Visualization.Rmd`.
 
 ## Understanding Eye-Tracking Metrics
 
@@ -185,8 +141,8 @@ file.rename("test1_F&S.csv", "test1_F_S.csv")
 | **Gaze density / heatmap** | A spatial summary of where total dwell time was concentrated. |
 | **Fixation duration** | Longer fixations suggest more cognitive effort being spent on that region. |
 
----
-
 ## Data Source
 
-Data collected using **iMotions** biometric research platform with a screen-based eye tracker. The stimulus is a 1920×1200px image of a David Carson magazine layout (1990). This dataset represents a single participant viewing session.
+Data collected using the **iMotions** biometric research platform (and Smart Eye Aurora) with
+a screen-based eye tracker, across 15 graphic design posters and up to 48 participants. This
+work was presented at the SURS Undergraduate Research Symposium at Georgia State University.
