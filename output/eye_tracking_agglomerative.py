@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.cluster.hierarchy import linkage, fcluster, dendrogram
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
 import matplotlib
 matplotlib.use("Agg")
@@ -47,7 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hierarchical_common import (
     POSTERS, K_RANGE, CROP_X0, CROP_Y0, REGION_COLORS,
     load_fixations, region_stats, duration_weighted_centers,
-    plot_clusters, plot_average_gaze_path,
+    plot_clusters, plot_average_gaze_path, filter_outliers, separation_score,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -61,8 +61,15 @@ def cluster_poster_agglomerative(sub: pd.DataFrame):
     sub = sub.copy()
     sub["px"] = sub["canvas_x"] - CROP_X0
     sub["py"] = sub["canvas_y"] - CROP_Y0
-    X = sub[["px", "py"]].to_numpy()
 
+    # drop stray/isolated fixations before building the merge tree at all, so
+    # they can't anchor their own tiny cluster or stretch a real region's hull
+    keep = filter_outliers(sub[["px", "py"]].to_numpy())
+    n_dropped = int((~keep).sum())
+    if n_dropped:
+        sub = sub.loc[keep].reset_index(drop=True)
+
+    X = sub[["px", "py"]].to_numpy()
     Z = linkage(X, method="ward")   # the full bottom-up merge tree, built once
 
     rows = []
@@ -70,11 +77,18 @@ def cluster_poster_agglomerative(sub: pd.DataFrame):
         labels = fcluster(Z, t=k, criterion="maxclust")
         if len(set(labels)) < 2:
             continue
-        sil = silhouette_score(X, labels)
-        rows.append(dict(k=k, silhouette=sil))
-    k_selection = pd.DataFrame(rows).sort_values("silhouette", ascending=False).reset_index(drop=True)
+        rows.append(dict(k=k, silhouette=silhouette_score(X, labels),
+                         davies_bouldin=davies_bouldin_score(X, labels),
+                         calinski_harabasz=calinski_harabasz_score(X, labels)))
+    k_selection = pd.DataFrame(rows)
     if k_selection.empty:
         raise RuntimeError("no viable k found for agglomerative clustering")
+    # choose k by combined silhouette + Davies-Bouldin separation, not
+    # silhouette alone, so a k that only looks good by carving off one tight
+    # little cluster doesn't beat a k with genuinely well-separated regions
+    k_selection["score"] = separation_score(k_selection["silhouette"].to_numpy(),
+                                            k_selection["davies_bouldin"].to_numpy())
+    k_selection = k_selection.sort_values("score", ascending=False).reset_index(drop=True)
 
     chosen_k = int(k_selection.iloc[0]["k"])
     labels = fcluster(Z, t=chosen_k, criterion="maxclust")   # 1..chosen_k
@@ -84,6 +98,8 @@ def cluster_poster_agglomerative(sub: pd.DataFrame):
     centers = duration_weighted_centers(sub, region_ids)
 
     info = dict(k=chosen_k, silhouette=float(k_selection.iloc[0]["silhouette"]),
+               davies_bouldin=float(k_selection.iloc[0]["davies_bouldin"]),
+               score=float(k_selection.iloc[0]["score"]), n_dropped=n_dropped,
                region_ids=region_ids, centers=centers, k_selection=k_selection, Z=Z)
     return sub, info
 
@@ -145,16 +161,21 @@ def main():
               f"{sub_all['participant'].nunique()} participants) ===")
 
         sub, info = cluster_poster_agglomerative(sub_all)
-        print("  Stage A -- silhouette by k (Ward-linkage cut):")
+        if info["n_dropped"]:
+            print(f"  dropped {info['n_dropped']} stray/isolated fixations before clustering "
+                  f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)")
+        print("  Stage A -- separation score (silhouette + Davies-Bouldin) by k (Ward-linkage cut):")
         print(info["k_selection"].to_string(index=False))
-        print(f"  Stage B -- cut at k={info['k']}  silhouette={info['silhouette']:.4f}")
+        print(f"  Stage B -- cut at k={info['k']}  silhouette={info['silhouette']:.4f}  "
+              f"Davies-Bouldin={info['davies_bouldin']:.4f}")
 
         stats, order = region_stats(sub, info["centers"], info["region_ids"])
         stats.to_csv(pdir / "region_stats.csv", index=False)
         sub.drop(columns=["region_raw"], errors="ignore").to_csv(pdir / "fixations_labelled.csv", index=False)
         info["k_selection"].to_csv(pdir / "k_selection.csv", index=False)
 
-        subtitle = f"k={info['k']} regions, Ward linkage, silhouette={info['silhouette']:.3f}"
+        subtitle = (f"k={info['k']} regions, Ward linkage, silhouette={info['silhouette']:.3f}, "
+                   f"Davies-Bouldin={info['davies_bouldin']:.3f}")
         plot_clusters(sub, info["centers"], stats, info["region_ids"], poster, img_file,
                      pdir / "agglomerative_clusters.png", "Agglomerative (Ward)", subtitle)
         plot_average_gaze_path(sub, info["centers"], stats, order, info["region_ids"], poster, img_file,
@@ -168,9 +189,13 @@ def main():
 
         summary_lines += [
             f"## {poster}", "",
-            f"- k selection (silhouette by k):", "",
+            (f"- Dropped {info['n_dropped']} stray/isolated fixations before clustering "
+             f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)" if info["n_dropped"] else
+             "- No fixations dropped as outliers"),
+            f"- k selection (silhouette + Davies-Bouldin separation score by k):", "",
             info["k_selection"].to_markdown(index=False), "",
-            f"- Chosen k={info['k']}, silhouette={info['silhouette']:.3f}",
+            f"- Chosen k={info['k']}, silhouette={info['silhouette']:.3f}, "
+            f"Davies-Bouldin={info['davies_bouldin']:.3f}",
             f"- Aggregate viewing order: {' -> '.join('R' + str(n) for n in order_nums)}", "",
             stats.to_markdown(index=False), "",
         ]

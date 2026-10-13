@@ -1,0 +1,4 @@
+region_raw_id,region_num,n_fixations,pct_gaze_time,avg_fixation_ms,first_attention_pct,avg_entry_ms,participant_coverage_pct,viewing_order,center_x,center_y
+0,1,2136,83.68,197.3,97.9,246.0,100.0,1,989.5,545.6
+1,2,209,8.66,208.7,2.1,4272.0,100.0,2,1178.3,650.3
+2,3,150,7.65,256.9,0.0,6188.0,95.8,3,765.1,887.0

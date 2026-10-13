@@ -18,10 +18,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.spatial import ConvexHull
+from sklearn.neighbors import NearestNeighbors
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 from matplotlib.patches import Polygon as MplPolygon
 from PIL import Image
 
@@ -37,6 +39,10 @@ DBSCAN_CACHE = HERE / "DBSCAN output" / "_cache" / "fixations_master.csv"
 N_PARTICIPANTS = 48
 
 POSTERS = {
+    "poster_ArminHofman-1955":    ("Armin Hofman- 1955", "Armin Hofman- 1955.jpg"),
+    "poster_BarryCeck-1988":      ("Barry Ceck - 1988", "Barry Ceck - 1988.jpg"),
+    "poster_DavidCarson":         ("David Carson", "David Carson.jpg"),
+    "poster_DavidCarson-1990":    ("David Carson - 1990", "David Carson - 1990.jpg"),
     "poster_EllaRosenblatt-2021": ("Ella Rosenblatt- 2021", "Ella Rosenblatt- 2021.jpg"),
     "poster_IrisChung-2015":      ("Iris Chung- 2015", "Iris Chung- 2015.jpg"),
     "poster_JanTschichold-1927-DieFrauohneNamen": (
@@ -44,6 +50,12 @@ POSTERS = {
     "poster_JanTschichold-1938-Der": ("Jan Tschichold-1938-Der", "Jan Tschichold-1938-Der.JPG"),
     "poster_JoostSchmidt-1923-Saatliches": (
         "Joost Schmidt-1923-Saatliches", "Joost Schmidt-1923-Saatliches.JPG"),
+    "poster_PaulRand-1947":       ("Paul Rand, 1947", "Paul Rand, 1947.jpg"),
+    "poster_PaulaScher-1995":     ("Paula Scher - 1995", "Paula Scher - 1995.jpg"),
+    "poster_ScottBarry-2010":     ("Scott Barry- 2010", "Scott Barry- 2010.jpg"),
+    "poster_SeanAlatorre":        ("Sean Alatorre", "Sean Alatorre.jpg"),
+    "poster_bookcover":           ("bookcover", "bookcover.jpg"),
+    "poster_nancy":               ("nancy poster", "nancy.jpg"),
 }
 
 CROP_X0, CROP_Y0 = 7, 68
@@ -52,7 +64,16 @@ CROP_W, CROP_H = CROP_X1 - CROP_X0, CROP_Y1 - CROP_Y0      # 1936 x 1208
 OFFSET_X, SCALE_X = 7, 1936 / 1920
 OFFSET_Y, SCALE_Y = 68, 1208 / 1200
 
-K_RANGE = (3, 7)
+# narrowed from (3,7): fewer/larger regions read as more distinct and are
+# less prone to the adjacent-region bleed you get when k pushes toward 7
+K_RANGE = (3, 5)
+
+# pre-clustering outlier filter: a fixation whose distance to its OUTLIER_K-th
+# nearest neighbour is far above the pack (robust median + MAD cutoff) is a
+# stray/isolated point, not a member of any real attention region -- dropping
+# it keeps those strays from dragging a region's boundary out to meet them.
+OUTLIER_K = 10
+OUTLIER_MAD_MULT = 3.0
 
 GAZE_COLS = ["Fixation Index", "Fixation X", "Fixation Y",
              "Fixation Start", "Fixation End", "Fixation Duration"]
@@ -60,6 +81,33 @@ GAZE_COLS = ["Fixation Index", "Fixation X", "Fixation Y",
 
 def transform_xy(x, y):
     return OFFSET_X + x * SCALE_X, OFFSET_Y + y * SCALE_Y
+
+
+def filter_outliers(points: np.ndarray, k: int = OUTLIER_K, mad_mult: float = OUTLIER_MAD_MULT) -> np.ndarray:
+    """Boolean keep-mask: True for points whose local density is in line with
+    the rest of the data, False for isolated/stray points."""
+    n = len(points)
+    k_eff = min(k, n - 1)
+    if k_eff < 1:
+        return np.ones(n, dtype=bool)
+    nn = NearestNeighbors(n_neighbors=k_eff + 1).fit(points)
+    dist, _ = nn.kneighbors(points)
+    knn_dist = dist[:, -1]                       # distance to k-th neighbour (excludes self)
+    med = np.median(knn_dist)
+    mad = np.median(np.abs(knn_dist - med)) * 1.4826   # normal-consistent MAD
+    if mad == 0:
+        return np.ones(n, dtype=bool)
+    return knn_dist <= med + mad_mult * mad
+
+
+def separation_score(sil: np.ndarray, db: np.ndarray) -> np.ndarray:
+    """Combines silhouette (higher = better) and Davies-Bouldin (lower =
+    better) into one 0-1 "how distinct are these regions" score, each
+    min-max normalised across the candidates being compared."""
+    def norm(a):
+        lo, hi = np.min(a), np.max(a)
+        return np.ones_like(a, dtype=float) if hi - lo < 1e-12 else (a - lo) / (hi - lo)
+    return 0.5 * norm(sil) + 0.5 * (1 - norm(db))
 
 
 def _read_imotions(path: Path, marker: str = "#DATA") -> pd.DataFrame:
@@ -270,7 +318,8 @@ def plot_average_gaze_path(sub, centers, stats, order, region_ids, poster, img_f
                    edgecolor="white", alpha=0.9, zorder=5)
         ax.text(cxp, cyp - 34, f"Region {rn}\n{pct_of[r]:.0f}% of gaze time",
                 color="white", fontweight="bold", ha="center", va="bottom",
-                fontsize=9, zorder=6)
+                fontsize=9, zorder=6,
+                path_effects=[pe.withStroke(linewidth=3, foreground="black")])
 
     ax.set_xlim(0, CROP_W); ax.set_ylim(CROP_H, 0)
     ax.set_xticks([]); ax.set_yticks([])

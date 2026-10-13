@@ -42,7 +42,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
 import matplotlib
 matplotlib.use("Agg")
@@ -52,7 +52,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hierarchical_common import (
     POSTERS, K_RANGE, CROP_X0, CROP_Y0, REGION_COLORS,
     load_fixations, region_stats, duration_weighted_centers,
-    plot_clusters, plot_average_gaze_path,
+    plot_clusters, plot_average_gaze_path, filter_outliers, separation_score,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -115,8 +115,15 @@ def cluster_poster_divisive(sub: pd.DataFrame):
     sub = sub.copy()
     sub["px"] = sub["canvas_x"] - CROP_X0
     sub["py"] = sub["canvas_y"] - CROP_Y0
-    X = sub[["px", "py"]].to_numpy()
 
+    # drop stray/isolated fixations before the bisecting process even starts,
+    # so a lone point can't get picked up as (half of) its own split
+    keep = filter_outliers(sub[["px", "py"]].to_numpy())
+    n_dropped = int((~keep).sum())
+    if n_dropped:
+        sub = sub.loc[keep].reset_index(drop=True)
+
+    X = sub[["px", "py"]].to_numpy()
     nodes, tree_records, labels_by_k = bisecting_tree(X, K_RANGE[1])
 
     rows = []
@@ -126,11 +133,17 @@ def cluster_poster_divisive(sub: pd.DataFrame):
         labels = labels_by_k[k]
         if len(set(labels)) < 2:
             continue
-        sil = silhouette_score(X, labels)
-        rows.append(dict(k=k, silhouette=sil))
-    k_selection = pd.DataFrame(rows).sort_values("silhouette", ascending=False).reset_index(drop=True)
+        rows.append(dict(k=k, silhouette=silhouette_score(X, labels),
+                         davies_bouldin=davies_bouldin_score(X, labels),
+                         calinski_harabasz=calinski_harabasz_score(X, labels)))
+    k_selection = pd.DataFrame(rows)
     if k_selection.empty:
         raise RuntimeError("no viable k found for divisive clustering")
+    # choose k by combined silhouette + Davies-Bouldin separation, not
+    # silhouette alone (see eye_tracking_agglomerative.py for the rationale)
+    k_selection["score"] = separation_score(k_selection["silhouette"].to_numpy(),
+                                            k_selection["davies_bouldin"].to_numpy())
+    k_selection = k_selection.sort_values("score", ascending=False).reset_index(drop=True)
 
     chosen_k = int(k_selection.iloc[0]["k"])
     labels = labels_by_k[chosen_k]
@@ -141,6 +154,8 @@ def cluster_poster_divisive(sub: pd.DataFrame):
     pruned_records = [r for r in tree_records if r["step"] <= chosen_k]
 
     info = dict(k=chosen_k, silhouette=float(k_selection.iloc[0]["silhouette"]),
+               davies_bouldin=float(k_selection.iloc[0]["davies_bouldin"]),
+               score=float(k_selection.iloc[0]["score"]), n_dropped=n_dropped,
                region_ids=region_ids, centers=centers, k_selection=k_selection,
                tree_records=pruned_records, n_points=len(sub))
     return sub, info
@@ -242,9 +257,13 @@ def main():
               f"{sub_all['participant'].nunique()} participants) ===")
 
         sub, info = cluster_poster_divisive(sub_all)
-        print("  Stage A -- silhouette by k (bisecting k-means):")
+        if info["n_dropped"]:
+            print(f"  dropped {info['n_dropped']} stray/isolated fixations before clustering "
+                  f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)")
+        print("  Stage A -- separation score (silhouette + Davies-Bouldin) by k (bisecting k-means):")
         print(info["k_selection"].to_string(index=False))
-        print(f"  Stage B -- split down to k={info['k']}  silhouette={info['silhouette']:.4f}")
+        print(f"  Stage B -- split down to k={info['k']}  silhouette={info['silhouette']:.4f}  "
+              f"Davies-Bouldin={info['davies_bouldin']:.4f}")
 
         stats, order = region_stats(sub, info["centers"], info["region_ids"])
         stats.to_csv(pdir / "region_stats.csv", index=False)
@@ -252,7 +271,8 @@ def main():
         info["k_selection"].to_csv(pdir / "k_selection.csv", index=False)
         pd.DataFrame(info["tree_records"]).to_csv(pdir / "split_tree.csv", index=False)
 
-        subtitle = f"k={info['k']} regions, bisecting k-means, silhouette={info['silhouette']:.3f}"
+        subtitle = (f"k={info['k']} regions, bisecting k-means, silhouette={info['silhouette']:.3f}, "
+                   f"Davies-Bouldin={info['davies_bouldin']:.3f}")
         plot_clusters(sub, info["centers"], stats, info["region_ids"], poster, img_file,
                      pdir / "divisive_clusters.png", "Divisive (bisecting k-means)", subtitle)
         plot_average_gaze_path(sub, info["centers"], stats, order, info["region_ids"], poster, img_file,
@@ -266,9 +286,13 @@ def main():
 
         summary_lines += [
             f"## {poster}", "",
-            f"- k selection (silhouette by k):", "",
+            (f"- Dropped {info['n_dropped']} stray/isolated fixations before clustering "
+             f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)" if info["n_dropped"] else
+             "- No fixations dropped as outliers"),
+            f"- k selection (silhouette + Davies-Bouldin separation score by k):", "",
             info["k_selection"].to_markdown(index=False), "",
-            f"- Chosen k={info['k']}, silhouette={info['silhouette']:.3f}",
+            f"- Chosen k={info['k']}, silhouette={info['silhouette']:.3f}, "
+            f"Davies-Bouldin={info['davies_bouldin']:.3f}",
             f"- Aggregate viewing order: {' -> '.join('R' + str(n) for n in order_nums)}", "",
             stats.to_markdown(index=False), "",
         ]

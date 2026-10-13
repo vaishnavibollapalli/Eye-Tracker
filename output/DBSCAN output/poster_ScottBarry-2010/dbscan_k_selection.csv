@@ -1,0 +1,2 @@
+min_samples,eps,n_clusters,noise_frac,silhouette,davies_bouldin,calinski_harabasz,ok,score
+15,40,5,0.024469820554649267,0.5242330224344975,0.5838968638171882,3826.6987520877315,True,0.9932070452300665

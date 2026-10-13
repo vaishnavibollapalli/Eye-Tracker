@@ -10,12 +10,13 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import ConvexHull
 from sklearn.cluster import DBSCAN
-from sklearn.metrics import silhouette_score
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 from matplotlib.patches import Polygon as MplPolygon
 from PIL import Image
 
@@ -30,6 +31,10 @@ CACHE = OUT_DIR / "_cache"
 N_PARTICIPANTS = 48
 
 POSTERS = {
+    "poster_ArminHofman-1955":    ("Armin Hofman- 1955", "Armin Hofman- 1955.jpg"),
+    "poster_BarryCeck-1988":      ("Barry Ceck - 1988", "Barry Ceck - 1988.jpg"),
+    "poster_DavidCarson":         ("David Carson", "David Carson.jpg"),
+    "poster_DavidCarson-1990":    ("David Carson - 1990", "David Carson - 1990.jpg"),
     "poster_EllaRosenblatt-2021": ("Ella Rosenblatt- 2021", "Ella Rosenblatt- 2021.jpg"),
     "poster_IrisChung-2015":      ("Iris Chung- 2015", "Iris Chung- 2015.jpg"),
     "poster_JanTschichold-1927-DieFrauohneNamen": (
@@ -37,6 +42,12 @@ POSTERS = {
     "poster_JanTschichold-1938-Der": ("Jan Tschichold-1938-Der", "Jan Tschichold-1938-Der.JPG"),
     "poster_JoostSchmidt-1923-Saatliches": (
         "Joost Schmidt-1923-Saatliches", "Joost Schmidt-1923-Saatliches.JPG"),
+    "poster_PaulRand-1947":       ("Paul Rand, 1947", "Paul Rand, 1947.jpg"),
+    "poster_PaulaScher-1995":     ("Paula Scher - 1995", "Paula Scher - 1995.jpg"),
+    "poster_ScottBarry-2010":     ("Scott Barry- 2010", "Scott Barry- 2010.jpg"),
+    "poster_SeanAlatorre":        ("Sean Alatorre", "Sean Alatorre.jpg"),
+    "poster_bookcover":           ("bookcover", "bookcover.jpg"),
+    "poster_nancy":               ("nancy poster", "nancy.jpg"),
 }
 
 # canvas transform: screen coords (1920x1200) -> the 1936x1208 plot canvas
@@ -49,12 +60,48 @@ OFFSET_Y, SCALE_Y = 68, 1208 / 1200
 # DBSCAN grid search (mirrors eye_tracking_dbscan.R)
 MIN_SAMPLES_GRID = [8, 10, 12, 15, 18, 20, 25, 30]
 EPS_GRID = [18, 20, 22, 25, 28, 30, 35, 40, 45, 50, 55, 60, 70, 80]
-K_RANGE = (3, 7)
+# narrowed from (3,7): fewer/larger regions read as more distinct and are
+# less prone to the adjacent-region bleed you get when k pushes toward 7
+K_RANGE = (3, 5)
 NOISE_RANGE = (0.02, 0.25)
+
+# pre-clustering outlier filter: a fixation whose distance to its OUTLIER_K-th
+# nearest neighbour is far above the pack (robust median + MAD cutoff) is a
+# stray/isolated point, not a member of any real attention region -- dropping
+# it keeps those strays from dragging a region's boundary out to meet them.
+OUTLIER_K = 10
+OUTLIER_MAD_MULT = 3.0
 
 
 def transform_xy(x, y):
     return OFFSET_X + x * SCALE_X, OFFSET_Y + y * SCALE_Y
+
+
+def filter_outliers(points: np.ndarray, k: int = OUTLIER_K, mad_mult: float = OUTLIER_MAD_MULT) -> np.ndarray:
+    """Boolean keep-mask: True for points whose local density is in line with
+    the rest of the data, False for isolated/stray points."""
+    n = len(points)
+    k_eff = min(k, n - 1)
+    if k_eff < 1:
+        return np.ones(n, dtype=bool)
+    nn = NearestNeighbors(n_neighbors=k_eff + 1).fit(points)
+    dist, _ = nn.kneighbors(points)
+    knn_dist = dist[:, -1]                       # distance to k-th neighbour (excludes self)
+    med = np.median(knn_dist)
+    mad = np.median(np.abs(knn_dist - med)) * 1.4826   # normal-consistent MAD
+    if mad == 0:
+        return np.ones(n, dtype=bool)
+    return knn_dist <= med + mad_mult * mad
+
+
+def separation_score(sil: np.ndarray, db: np.ndarray) -> np.ndarray:
+    """Combines silhouette (higher = better) and Davies-Bouldin (lower =
+    better) into one 0-1 "how distinct are these regions" score, each
+    min-max normalised across the candidates being compared."""
+    def norm(a):
+        lo, hi = np.min(a), np.max(a)
+        return np.ones_like(a, dtype=float) if hi - lo < 1e-12 else (a - lo) / (hi - lo)
+    return 0.5 * norm(sil) + 0.5 * (1 - norm(db))
 
 
 # STEP 1: extract & transform fixations for every poster, every participant
@@ -166,11 +213,19 @@ def cluster_poster_regions_dbscan(sub: pd.DataFrame):
     sub = sub.copy()
     sub["px"] = sub["canvas_x"] - CROP_X0
     sub["py"] = sub["canvas_y"] - CROP_Y0
+
+    # drop stray/isolated fixations before clustering at all, so they can't
+    # drag a region's boundary toward them or get folded in as fake "noise"
+    keep = filter_outliers(sub[["px", "py"]].to_numpy())
+    n_dropped = int((~keep).sum())
+    if n_dropped:
+        sub = sub.loc[keep].reset_index(drop=True)
+
     X = sub[["px", "py"]].to_numpy()
     w = sub["duration"].to_numpy()
 
     def run_grid(k_lo, k_hi, noise_lo, noise_hi):
-        """Every (eps, min_samples) combo, with silhouette where it's viable."""
+        """Every (eps, min_samples) combo, with silhouette/DB/CH where viable."""
         tried = []
         for ms in MIN_SAMPLES_GRID:
             for eps in EPS_GRID:
@@ -178,42 +233,64 @@ def cluster_poster_regions_dbscan(sub: pd.DataFrame):
                 mask = labels != -1
                 n_clusters = len(set(labels[mask]))
                 noise_frac = float(np.mean(labels == -1))
-                row = dict(min_samples=ms, eps=eps, n_clusters=n_clusters,
-                           noise_frac=noise_frac, silhouette=np.nan, ok=False)
+                row = dict(min_samples=ms, eps=eps, n_clusters=n_clusters, noise_frac=noise_frac,
+                           silhouette=np.nan, davies_bouldin=np.nan, calinski_harabasz=np.nan, ok=False)
                 if (k_lo <= n_clusters <= k_hi
                         and noise_lo <= noise_frac <= noise_hi
                         and mask.sum() >= 10):
                     row["silhouette"] = silhouette_score(X[mask], labels[mask])
+                    row["davies_bouldin"] = davies_bouldin_score(X[mask], labels[mask])
+                    row["calinski_harabasz"] = calinski_harabasz_score(X[mask], labels[mask])
                     row["ok"] = True
                 tried.append(row)
         return pd.DataFrame(tried)
 
-    # ---- STAGE A: choose the number of regions (k) by best-achievable silhouette
-    tried_df = run_grid(K_RANGE[0], K_RANGE[1], NOISE_RANGE[0], NOISE_RANGE[1])
-    ok_df = tried_df[tried_df["ok"]]
-
+    # ---- STAGE A: choose the number of regions (k) by best-achievable
+    # separation -- silhouette combined with Davies-Bouldin, not silhouette
+    # alone, so a k that only "scores well" by splintering off a tiny tight
+    # cluster doesn't win over a k with genuinely well-separated regions.
+    #
+    # Fallback is graduated, not an all-or-nothing jump to an unrestricted
+    # noise ceiling: an uncapped relaxation can "win" by finding a tiny,
+    # ultra-dense core (great silhouette/DB on that 15-20% of points) while
+    # silently 1-NN-reassigning the other 75-85% of fixations -- a deceptive
+    # result, not a genuinely well-separated clustering. Each step below
+    # widens the search a little; the noise ceiling never exceeds 0.40.
+    attempts = [
+        (K_RANGE[0], K_RANGE[1], NOISE_RANGE[0], NOISE_RANGE[1]),   # primary
+        (K_RANGE[0], K_RANGE[1], NOISE_RANGE[0], 0.40),             # widen noise ceiling only
+        (2, 9, NOISE_RANGE[0], 0.40),                                # widen k too, same noise cap
+    ]
     relaxed = False
-    if ok_df.empty:
-        # fallback: drop the noise-fraction gate, widen k to 2-9
-        relaxed = True
-        tried_df = run_grid(2, 9, 0.0, 1.0)
-        ok_df = tried_df[tried_df["ok"]]
-        if ok_df.empty:
-            raise RuntimeError("DBSCAN found no usable clustering even after relaxing the grid")
+    tried_df = ok_df = None
+    for i, (k_lo, k_hi, n_lo, n_hi) in enumerate(attempts):
+        tried_df = run_grid(k_lo, k_hi, n_lo, n_hi)
+        ok_df = tried_df[tried_df["ok"]].copy()
+        if not ok_df.empty:
+            relaxed = i > 0
+            break
+    else:
+        raise RuntimeError("DBSCAN found no usable clustering even after relaxing the grid "
+                           "(noise capped at 40% -- widen MIN_SAMPLES_GRID/EPS_GRID instead of "
+                           "the noise cap if this keeps happening)")
 
-    # best silhouette achievable at each k -> the k selection table
-    k_selection = (ok_df.loc[ok_df.groupby("n_clusters")["silhouette"].idxmax()]
-                        .sort_values("silhouette", ascending=False)
+    ok_df["score"] = separation_score(ok_df["silhouette"].to_numpy(), ok_df["davies_bouldin"].to_numpy())
+
+    # best combined score achievable at each k -> the k selection table
+    k_selection = (ok_df.loc[ok_df.groupby("n_clusters")["score"].idxmax()]
+                        .sort_values("score", ascending=False)
                         .reset_index(drop=True))
     best_k_row = k_selection.iloc[0]
     chosen_k = int(best_k_row["n_clusters"])
 
     # ---- STAGE B: DBSCAN clustering, fixed to the (eps, min_samples) that
-    # produced the chosen k with the best silhouette
+    # produced the chosen k with the best combined separation score
     ms, eps = int(best_k_row["min_samples"]), int(best_k_row["eps"])
     labels = DBSCAN(eps=eps, min_samples=ms).fit_predict(X)
     best = dict(min_samples=ms, eps=eps, labels=labels,
                 silhouette=float(best_k_row["silhouette"]),
+                davies_bouldin=float(best_k_row["davies_bouldin"]),
+                score=float(best_k_row["score"]),
                 n_clusters=chosen_k, noise_frac=float(best_k_row["noise_frac"]))
 
     labels = best["labels"]
@@ -237,7 +314,8 @@ def cluster_poster_regions_dbscan(sub: pd.DataFrame):
 
     info = dict(min_samples=best["min_samples"], eps=best["eps"],
                k=best["n_clusters"], silhouette=best["silhouette"],
-               noise_frac=best["noise_frac"], relaxed=relaxed,
+               davies_bouldin=best["davies_bouldin"], score=best["score"],
+               noise_frac=best["noise_frac"], relaxed=relaxed, n_dropped=n_dropped,
                region_ids=region_ids, centers=centers, tried=tried_df,
                k_selection=k_selection)
     return sub, info
@@ -318,7 +396,7 @@ def plot_clusters(sub, info, stats, poster, img_file, out_path):
     ax.set_title(f"{poster}  --  DBSCAN fixation clusters (all {sub['participant'].nunique()} participants)\n"
                  f"eps={info['eps']}px, min_samples={info['min_samples']}, "
                  f"k={info['k']} regions, {info['noise_frac']*100:.0f}% noise, "
-                 f"silhouette={info['silhouette']:.3f}"
+                 f"silhouette={info['silhouette']:.3f}, Davies-Bouldin={info['davies_bouldin']:.3f}"
                  + ("   [relaxed grid]" if info["relaxed"] else ""), fontsize=11)
     ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
     ax.set_xticks([]); ax.set_yticks([])
@@ -364,7 +442,8 @@ def plot_average_gaze_path(sub, info, stats, order, poster, img_file, out_path):
                    edgecolor="white", alpha=0.9, zorder=5)
         ax.text(cxp, cyp - 34, f"Region {rn}\n{pct_of[r]:.0f}% of gaze time",
                 color="white", fontweight="bold", ha="center", va="bottom",
-                fontsize=9, zorder=6)
+                fontsize=9, zorder=6,
+                path_effects=[pe.withStroke(linewidth=3, foreground="black")])
 
     ax.set_xlim(0, CROP_W); ax.set_ylim(CROP_H, 0)
     ax.set_xticks([]); ax.set_yticks([])
@@ -415,12 +494,18 @@ def main():
               f"{sub_all['participant'].nunique()} participants) ===")
 
         sub, info = cluster_poster_regions_dbscan(sub_all)
-        print("  Stage A -- best silhouette achievable at each k (this picks the number of regions):")
-        print(info["k_selection"].to_string(index=False))
-        print(f"  -> k={info['k']} chosen (highest silhouette across k)")
+        if info["n_dropped"]:
+            print(f"  dropped {info['n_dropped']} stray/isolated fixations before clustering "
+                  f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)")
+        print("  Stage A -- best separation score (silhouette + Davies-Bouldin) at each k:")
+        print(info["k_selection"][["n_clusters", "min_samples", "eps", "silhouette",
+                                   "davies_bouldin", "calinski_harabasz", "noise_frac", "score"]]
+              .to_string(index=False))
+        print(f"  -> k={info['k']} chosen (highest combined separation score across k)")
         print(f"  Stage B -- DBSCAN clustering at k={info['k']}: "
               f"eps={info['eps']}  min_samples={info['min_samples']}  "
-              f"noise={info['noise_frac']*100:.1f}%  silhouette={info['silhouette']:.4f}"
+              f"noise={info['noise_frac']*100:.1f}%  silhouette={info['silhouette']:.4f}  "
+              f"Davies-Bouldin={info['davies_bouldin']:.4f}"
               + ("  [relaxed grid]" if info["relaxed"] else ""))
 
         stats, order = region_stats(sub, info)
@@ -441,14 +526,18 @@ def main():
 
         summary_lines += [
             f"## {poster}", "",
-            f"- Number of regions (k) chosen by best-achievable silhouette across "
-            f"k={K_RANGE[0]}..{K_RANGE[1]}:",
+            (f"- Dropped {info['n_dropped']} stray/isolated fixations before clustering "
+             f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)" if info["n_dropped"] else
+             "- No fixations dropped as outliers"),
+            f"- Number of regions (k) chosen by best combined separation score "
+            f"(silhouette + Davies-Bouldin) across k={K_RANGE[0]}..{K_RANGE[1]}:",
             "",
-            info["k_selection"][["n_clusters", "silhouette", "eps", "min_samples", "noise_frac"]]
+            info["k_selection"][["n_clusters", "silhouette", "davies_bouldin", "calinski_harabasz",
+                                 "eps", "min_samples", "noise_frac", "score"]]
                 .rename(columns={"n_clusters": "k"}).to_markdown(index=False),
             "",
             f"- Chosen k={info['k']}  ->  DBSCAN eps={info['eps']}px, min_samples={info['min_samples']}, "
-            f"silhouette={info['silhouette']:.3f}"
+            f"silhouette={info['silhouette']:.3f}, Davies-Bouldin={info['davies_bouldin']:.3f}"
             + ("  _(relaxed grid)_" if info["relaxed"] else ""),
             f"- {info['noise_frac']*100:.1f}% of fixations were noise (folded into nearest region)",
             f"- Aggregate viewing order: {' -> '.join('R' + str(n) for n in order_nums)}",
