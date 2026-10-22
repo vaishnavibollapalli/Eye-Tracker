@@ -64,9 +64,14 @@ CROP_W, CROP_H = CROP_X1 - CROP_X0, CROP_Y1 - CROP_Y0      # 1936 x 1208
 OFFSET_X, SCALE_X = 7, 1936 / 1920
 OFFSET_Y, SCALE_Y = 68, 1208 / 1200
 
-# narrowed from (3,7): fewer/larger regions read as more distinct and are
-# less prone to the adjacent-region bleed you get when k pushes toward 7
-K_RANGE = (3, 5)
+# widened: more, smaller regions are preferred as long as they stay spatially
+# distinct (see decide_k below) -- the old (3,5) cap ruled out legitimately
+# good finer-grained splits before they even got a chance to be scored.
+K_RANGE = (3, 8)
+
+# decide_k tolerance bands (see decide_k's docstring)
+DB_TOL = 0.15
+SIL_TOL = 0.15
 
 # pre-clustering outlier filter: a fixation whose distance to its OUTLIER_K-th
 # nearest neighbour is far above the pack (robust median + MAD cutoff) is a
@@ -108,6 +113,141 @@ def separation_score(sil: np.ndarray, db: np.ndarray) -> np.ndarray:
         lo, hi = np.min(a), np.max(a)
         return np.ones_like(a, dtype=float) if hi - lo < 1e-12 else (a - lo) / (hi - lo)
     return 0.5 * norm(sil) + 0.5 * (1 - norm(db))
+
+
+# ---------------------------------------------------------------------------
+# region-hull crossing check (convex polygon overlap via separating-axis
+# theorem) and the k-decision rule built on top of it
+# ---------------------------------------------------------------------------
+def hull_of(points: np.ndarray):
+    """Convex hull vertices for a region's points, or None if too few points
+    to form a polygon (fewer than 3)."""
+    if len(points) < 3:
+        return None
+    try:
+        return points[ConvexHull(points).vertices]
+    except Exception:
+        return None
+
+
+# a boolean "do these hulls touch at all" test is too strict on real, messy
+# point clouds -- a single stray boundary point gives a region's hull a thin
+# spur that grazes its neighbour even when the two clusters are otherwise
+# cleanly separated. What actually matters is MEANINGFUL overlap, so this
+# computes the overlap AREA (via Sutherland-Hodgman polygon clipping) as a
+# fraction of the smaller hull's area, and only counts it as "crossing" past
+# this threshold.
+CROSS_OVERLAP_THRESHOLD = 0.15
+
+
+def _signed_area(poly) -> float:
+    n = len(poly)
+    s = 0.0
+    for i in range(n):
+        x1, y1 = poly[i]; x2, y2 = poly[(i + 1) % n]
+        s += x1 * y2 - x2 * y1
+    return s / 2
+
+
+def _clip_convex(subject: list, clip: list) -> list:
+    """Sutherland-Hodgman: subject polygon clipped to the (convex) clip polygon."""
+    if _signed_area(clip) < 0:
+        clip = clip[::-1]
+
+    def inside(p, a, b):
+        return (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) >= 0
+
+    def intersect(p1, p2, a, b):
+        x1, y1 = p1; x2, y2 = p2; x3, y3 = a; x4, y4 = b
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(denom) < 1e-12:
+            return p2
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+        return (x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+
+    output = list(subject)
+    for i in range(len(clip)):
+        if not output:
+            break
+        a, b = clip[i], clip[(i + 1) % len(clip)]
+        input_list, output = output, []
+        s = input_list[-1]
+        for e in input_list:
+            e_in = inside(e, a, b)
+            if e_in:
+                if not inside(s, a, b):
+                    output.append(intersect(s, e, a, b))
+                output.append(e)
+            elif inside(s, a, b):
+                output.append(intersect(s, e, a, b))
+            s = e
+    return output
+
+
+def _overlap_fraction(poly_a: np.ndarray, poly_b: np.ndarray) -> float:
+    """Intersection area / smaller hull's area -- 0 if they don't overlap."""
+    inter = _clip_convex([tuple(p) for p in poly_a], [tuple(p) for p in poly_b])
+    if len(inter) < 3:
+        return 0.0
+    area_inter = abs(_signed_area(inter))
+    area_a, area_b = abs(_signed_area(poly_a)), abs(_signed_area(poly_b))
+    smaller = min(area_a, area_b)
+    return 0.0 if smaller < 1e-9 else area_inter / smaller
+
+
+def any_hulls_cross(sub: pd.DataFrame, region_ids: list, threshold: float = CROSS_OVERLAP_THRESHOLD) -> bool:
+    """True if any two regions' convex hulls overlap by more than `threshold`
+    of the smaller region's area -- i.e. the clustering produced regions that
+    meaningfully overlap on the poster, not just a thin incidental graze."""
+    hulls = []
+    for r in region_ids:
+        pts = sub.loc[sub["region"] == r, ["px", "py"]].to_numpy()
+        h = hull_of(pts)
+        if h is not None:
+            hulls.append(h)
+    for i in range(len(hulls)):
+        for j in range(i + 1, len(hulls)):
+            if _overlap_fraction(hulls[i], hulls[j]) > threshold:
+                return True
+    return False
+
+
+def decide_k(candidates: pd.DataFrame, db_tol: float = DB_TOL, sil_tol: float = SIL_TOL) -> pd.Series:
+    """The number-of-regions decision rule, applied the same way by all three
+    clustering methods:
+
+      1. Davies-Bouldin is the PRIMARY signal: keep only candidate k's whose
+         Davies-Bouldin is within `db_tol` (15%) of the best (lowest) DB
+         achieved by any candidate.
+      2. Silhouette is the secondary check: among those, keep only the ones
+         within `sil_tol` (15%) of the best silhouette in that narrowed set
+         -- so a k that "won" on DB alone but has a clearly worse silhouette
+         doesn't survive.
+      3. Regions that spatially cross (overlapping convex hulls) are
+         disqualified outright, regardless of their metrics -- crossing
+         regions aren't actually distinct.
+      4. Among whatever survives 1-3, the LARGEST k wins: more, smaller,
+         still-distinct regions are preferred over fewer, larger ones.
+
+    `candidates` needs columns: k, silhouette, davies_bouldin, crosses.
+    Falls back to ignoring the crossing filter (with a flag) only if every
+    single candidate crosses -- so decide_k always returns *something*.
+    """
+    cand = candidates[~candidates["crosses"]]
+    used_crossing_fallback = False
+    if cand.empty:
+        cand = candidates
+        used_crossing_fallback = True
+
+    best_db = cand["davies_bouldin"].min()
+    stage1 = cand[cand["davies_bouldin"] <= best_db * (1 + db_tol)]
+
+    best_sil = stage1["silhouette"].max()
+    stage2 = stage1[stage1["silhouette"] >= best_sil * (1 - sil_tol)]
+
+    chosen = stage2.loc[stage2["k"].idxmax()].copy()
+    chosen["used_crossing_fallback"] = used_crossing_fallback
+    return chosen
 
 
 def _read_imotions(path: Path, marker: str = "#DATA") -> pd.DataFrame:

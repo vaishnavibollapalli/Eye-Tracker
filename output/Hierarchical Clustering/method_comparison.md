@@ -1,136 +1,136 @@
 # Clustering Method Comparison -- per poster
 
 ## poster_ArminHofman-1955
-**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.796 after a 20% noise discount), silhouette 0.750, Davies-Bouldin 0.324; Agglomerative scored 0.031 (silhouette 0.635, DB 0.434); Divisive scored 0.009 (silhouette 0.637, DB 0.441).
+**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.796 after a 20% noise discount), k=3 regions, silhouette 0.750, Davies-Bouldin 0.324; Agglomerative scored 0.031 at k=3 (silhouette 0.635, DB 0.434); Divisive scored 0.009 at k=3 (silhouette 0.637, DB 0.441). k chosen per method: DBSCAN=3, Agglomerative=3, Divisive=3.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   3 |        0.75  |            0.324 |        20.4 |              0.796 |
-| Agglomerative |   3 |        0.635 |            0.434 |         0   |              0.031 |
-| Divisive      |   3 |        0.637 |            0.441 |         0   |              0.009 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   3 |        0.75  |            0.324 |        20.4 | False     |              0.796 |
+| Agglomerative |   3 |        0.635 |            0.434 |         0   | False     |              0.031 |
+| Divisive      |   3 |        0.637 |            0.441 |         0   | False     |              0.009 |
 
 ## poster_BarryCeck-1988
-**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (1.000), silhouette 0.461, Davies-Bouldin 0.739; DBSCAN scored 0.000 (silhouette 0.130, DB 0.903, 4% noise); Divisive scored 0.899 (silhouette 0.449, DB 0.766).
+**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (1.000), k=4 regions, silhouette 0.461, Davies-Bouldin 0.739; DBSCAN scored 0.026 at k=7 (silhouette 0.393, DB 0.865, 8% noise); Divisive scored 0.202 at k=8 (silhouette 0.420, DB 0.873). k chosen per method: DBSCAN=7, Agglomerative=4, Divisive=8.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   4 |        0.13  |            0.903 |         3.5 |              0     |
-| Agglomerative |   4 |        0.461 |            0.739 |         0   |              1     |
-| Divisive      |   4 |        0.449 |            0.766 |         0   |              0.899 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   7 |        0.393 |            0.865 |           8 | True      |              0.026 |
+| Agglomerative |   4 |        0.461 |            0.739 |           0 | False     |              1     |
+| Divisive      |   8 |        0.42  |            0.873 |           0 | False     |              0.202 |
 
 ## poster_DavidCarson
-**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.768 after a 23% noise discount), silhouette 0.525, Davies-Bouldin 0.515; Agglomerative scored 0.156 (silhouette 0.470, DB 0.643); Divisive scored 0.429 (silhouette 0.517, DB 0.700).
+**Winner: Divisive**  -  Divisive wins: highest separation score (0.619), k=4 regions, silhouette 0.491, Davies-Bouldin 0.666; DBSCAN scored 0.460 at k=7 (silhouette 0.449, DB 0.522, 24% noise); Agglomerative scored 0.000 at k=8 (silhouette 0.437, DB 0.712). k chosen per method: DBSCAN=7, Agglomerative=8, Divisive=4.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   5 |        0.525 |            0.515 |        23.2 |              0.768 |
-| Agglomerative |   5 |        0.47  |            0.643 |         0   |              0.156 |
-| Divisive      |   3 |        0.517 |            0.7   |         0   |              0.429 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   7 |        0.449 |            0.522 |        24.3 | False     |              0.46  |
+| Agglomerative |   8 |        0.437 |            0.712 |         0   | False     |              0     |
+| Divisive      |   4 |        0.491 |            0.666 |         0   | False     |              0.619 |
 
 ## poster_DavidCarson-1990
-**Winner: Divisive**  -  Divisive wins: highest separation score (0.709), silhouette 0.571, Davies-Bouldin 0.609; DBSCAN scored 0.433 (silhouette 0.532, DB 0.582, 13% noise); Agglomerative scored 0.410 (silhouette 0.564, DB 0.628).
+**Winner: Divisive**  -  Divisive wins: highest separation score (0.568), k=3 regions, silhouette 0.571, Davies-Bouldin 0.609; DBSCAN scored 0.409 at k=7 (silhouette 0.529, DB 0.488, 18% noise); Agglomerative scored 0.416 at k=3 (silhouette 0.564, DB 0.628). k chosen per method: DBSCAN=7, Agglomerative=3, Divisive=3.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   5 |        0.532 |            0.582 |        13.5 |              0.433 |
-| Agglomerative |   3 |        0.564 |            0.628 |         0   |              0.41  |
-| Divisive      |   3 |        0.571 |            0.609 |         0   |              0.709 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   7 |        0.529 |            0.488 |        18.2 | False     |              0.409 |
+| Agglomerative |   3 |        0.564 |            0.628 |         0   | False     |              0.416 |
+| Divisive      |   3 |        0.571 |            0.609 |         0   | False     |              0.568 |
 
 ## poster_EllaRosenblatt-2021
-**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (0.500), silhouette 0.574, Davies-Bouldin 0.584; DBSCAN scored 0.455 (silhouette 0.500, DB 0.532, 9% noise); Divisive scored 0.444 (silhouette 0.557, DB 0.577).
+**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.788 after a 21% noise discount), k=6 regions, silhouette 0.697, Davies-Bouldin 0.397; Agglomerative scored 0.053 at k=6 (silhouette 0.572, DB 0.604); Divisive scored 0.064 at k=5 (silhouette 0.557, DB 0.577). k chosen per method: DBSCAN=6, Agglomerative=6, Divisive=5.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   5 |        0.5   |            0.532 |           9 |              0.455 |
-| Agglomerative |   5 |        0.574 |            0.584 |           0 |              0.5   |
-| Divisive      |   5 |        0.557 |            0.577 |           0 |              0.444 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   6 |        0.697 |            0.397 |        21.2 | False     |              0.788 |
+| Agglomerative |   6 |        0.572 |            0.604 |         0   | False     |              0.053 |
+| Divisive      |   5 |        0.557 |            0.577 |         0   | False     |              0.064 |
 
 ## poster_IrisChung-2015
-**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (0.655), silhouette 0.431, Davies-Bouldin 0.730; DBSCAN scored 0.485 (silhouette 0.399, DB 0.521, 3% noise); Divisive scored 0.121 (silhouette 0.407, DB 0.824).
+**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (0.742), k=8 regions, silhouette 0.458, Davies-Bouldin 0.688; DBSCAN scored 0.464 at k=7 (silhouette 0.400, DB 0.561, 7% noise); Divisive scored 0.360 at k=8 (silhouette 0.442, DB 0.807). k chosen per method: DBSCAN=7, Agglomerative=8, Divisive=8.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   3 |        0.399 |            0.521 |         2.9 |              0.485 |
-| Agglomerative |   4 |        0.431 |            0.73  |         0   |              0.655 |
-| Divisive      |   5 |        0.407 |            0.824 |         0   |              0.121 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   7 |        0.4   |            0.561 |         7.2 | False     |              0.464 |
+| Agglomerative |   8 |        0.458 |            0.688 |         0   | False     |              0.742 |
+| Divisive      |   8 |        0.442 |            0.807 |         0   | False     |              0.36  |
 
 ## poster_JanTschichold-1927-DieFrauohneNamen
-**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.912 after a 9% noise discount), silhouette 0.626, Davies-Bouldin 0.444; Agglomerative scored 0.191 (silhouette 0.501, DB 0.669); Divisive scored 0.000 (silhouette 0.484, DB 0.748).
+**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.912 after a 9% noise discount), k=7 regions, silhouette 0.626, Davies-Bouldin 0.444; Agglomerative scored 0.068 at k=8 (silhouette 0.596, DB 0.534); Divisive scored 0.082 at k=7 (silhouette 0.591, DB 0.519). k chosen per method: DBSCAN=7, Agglomerative=8, Divisive=7.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   7 |        0.626 |            0.444 |         8.8 |              0.912 |
-| Agglomerative |   5 |        0.501 |            0.669 |         0   |              0.191 |
-| Divisive      |   5 |        0.484 |            0.748 |         0   |              0     |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   7 |        0.626 |            0.444 |         8.8 | False     |              0.912 |
+| Agglomerative |   8 |        0.596 |            0.534 |         0   | False     |              0.068 |
+| Divisive      |   7 |        0.591 |            0.519 |         0   | False     |              0.082 |
 
 ## poster_JanTschichold-1938-Der
-**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (1.000), silhouette 0.642, Davies-Bouldin 0.475; DBSCAN scored 0.018 (silhouette 0.608, DB 0.531, 2% noise); Divisive scored 0.096 (silhouette 0.606, DB 0.520).
+**Winner: Divisive**  -  Divisive wins: highest separation score (1.000), k=6 regions, silhouette 0.650, Davies-Bouldin 0.482; DBSCAN scored 0.000 at k=6 (silhouette 0.608, DB 0.531, 2% noise); Agglomerative scored 0.730 at k=6 (silhouette 0.634, DB 0.490). k chosen per method: DBSCAN=6, Agglomerative=6, Divisive=6.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   6 |        0.608 |            0.531 |           2 |              0.018 |
-| Agglomerative |   5 |        0.642 |            0.475 |           0 |              1     |
-| Divisive      |   5 |        0.606 |            0.52  |           0 |              0.096 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   6 |        0.608 |            0.531 |           2 | False     |               0    |
+| Agglomerative |   6 |        0.634 |            0.49  |           0 | False     |               0.73 |
+| Divisive      |   6 |        0.65  |            0.482 |           0 | False     |               1    |
 
 ## poster_JoostSchmidt-1923-Saatliches
-**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.943 after a 6% noise discount), silhouette 0.515, Davies-Bouldin 0.459; Agglomerative scored 0.555 (silhouette 0.499, DB 0.690); Divisive scored 0.000 (silhouette 0.432, DB 0.789).
+**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.712 after a 8% noise discount), k=6 regions, silhouette 0.477, Davies-Bouldin 0.483; Agglomerative scored 0.500 at k=3 (silhouette 0.524, DB 0.789); Divisive scored 0.071 at k=8 (silhouette 0.418, DB 0.746). k chosen per method: DBSCAN=6, Agglomerative=3, Divisive=8.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   5 |        0.515 |            0.459 |         5.7 |              0.943 |
-| Agglomerative |   5 |        0.499 |            0.69  |         0   |              0.555 |
-| Divisive      |   3 |        0.432 |            0.789 |         0   |              0     |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   6 |        0.477 |            0.483 |         8.3 | False     |              0.712 |
+| Agglomerative |   3 |        0.524 |            0.789 |         0   | False     |              0.5   |
+| Divisive      |   8 |        0.418 |            0.746 |         0   | False     |              0.071 |
 
 ## poster_PaulRand-1947
-**Winner: Divisive**  -  Divisive wins: highest separation score (0.670), silhouette 0.545, Davies-Bouldin 0.648; DBSCAN scored 0.451 (silhouette 0.476, DB 0.519, 10% noise); Agglomerative scored 0.230 (silhouette 0.508, DB 0.714).
+**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.778 after a 22% noise discount), k=7 regions, silhouette 0.600, Davies-Bouldin 0.389; Agglomerative scored 0.000 at k=8 (silhouette 0.498, DB 0.719); Divisive scored 0.235 at k=4 (silhouette 0.533, DB 0.676). k chosen per method: DBSCAN=7, Agglomerative=8, Divisive=4.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   5 |        0.476 |            0.519 |         9.8 |              0.451 |
-| Agglomerative |   3 |        0.508 |            0.714 |         0   |              0.23  |
-| Divisive      |   3 |        0.545 |            0.648 |         0   |              0.67  |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   7 |        0.6   |            0.389 |        22.2 | False     |              0.778 |
+| Agglomerative |   8 |        0.498 |            0.719 |         0   | False     |              0     |
+| Divisive      |   4 |        0.533 |            0.676 |         0   | False     |              0.235 |
 
 ## poster_PaulaScher-1995
-**Winner: Divisive**  -  Divisive wins: highest separation score (0.588), silhouette 0.479, Davies-Bouldin 0.763; DBSCAN scored 0.484 (silhouette 0.280, DB 0.718, 3% noise); Agglomerative scored 0.423 (silhouette 0.449, DB 0.773).
+**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (0.794), k=8 regions, silhouette 0.415, Davies-Bouldin 0.751; DBSCAN scored 0.484 at k=4 (silhouette 0.280, DB 0.718, 3% noise); Divisive scored 0.500 at k=4 (silhouette 0.432, DB 0.830). k chosen per method: DBSCAN=4, Agglomerative=8, Divisive=4.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   4 |        0.28  |            0.718 |         3.2 |              0.484 |
-| Agglomerative |   4 |        0.449 |            0.773 |         0   |              0.423 |
-| Divisive      |   3 |        0.479 |            0.763 |         0   |              0.588 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   4 |        0.28  |            0.718 |         3.2 | False     |              0.484 |
+| Agglomerative |   8 |        0.415 |            0.751 |         0   | False     |              0.794 |
+| Divisive      |   4 |        0.432 |            0.83  |         0   | False     |              0.5   |
 
 ## poster_ScottBarry-2010
-**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.976 after a 2% noise discount), silhouette 0.524, Davies-Bouldin 0.584; Agglomerative scored 0.703 (silhouette 0.521, DB 0.664); Divisive scored 0.000 (silhouette 0.452, DB 0.730).
+**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (1.000), k=8 regions, silhouette 0.561, Davies-Bouldin 0.575; DBSCAN scored 0.415 at k=6 (silhouette 0.457, DB 0.589, 3% noise); Divisive scored 0.291 at k=8 (silhouette 0.518, DB 0.668). k chosen per method: DBSCAN=6, Agglomerative=8, Divisive=8.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   5 |        0.524 |            0.584 |         2.4 |              0.976 |
-| Agglomerative |   5 |        0.521 |            0.664 |         0   |              0.703 |
-| Divisive      |   5 |        0.452 |            0.73  |         0   |              0     |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   6 |        0.457 |            0.589 |         2.7 | False     |              0.415 |
+| Agglomerative |   8 |        0.561 |            0.575 |         0   | False     |              1     |
+| Divisive      |   8 |        0.518 |            0.668 |         0   | False     |              0.291 |
 
 ## poster_SeanAlatorre
-**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.887 after a 11% noise discount), silhouette 0.583, Davies-Bouldin 0.462; Agglomerative scored 0.343 (silhouette 0.542, DB 0.568); Divisive scored 0.000 (silhouette 0.533, DB 0.671).
+**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.806 after a 19% noise discount), k=8 regions, silhouette 0.600, Davies-Bouldin 0.475; Agglomerative scored 0.103 at k=6 (silhouette 0.539, DB 0.626); Divisive scored 0.231 at k=7 (silhouette 0.567, DB 0.666). k chosen per method: DBSCAN=8, Agglomerative=6, Divisive=7.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   5 |        0.583 |            0.462 |        11.3 |              0.887 |
-| Agglomerative |   3 |        0.542 |            0.568 |         0   |              0.343 |
-| Divisive      |   5 |        0.533 |            0.671 |         0   |              0     |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   8 |        0.6   |            0.475 |        19.4 | False     |              0.806 |
+| Agglomerative |   6 |        0.539 |            0.626 |         0   | False     |              0.103 |
+| Divisive      |   7 |        0.567 |            0.666 |         0   | False     |              0.231 |
 
 ## poster_bookcover
-**Winner: Agglomerative**  -  Agglomerative wins: highest separation score (1.000), silhouette 0.473, Davies-Bouldin 0.749; DBSCAN scored 0.000 (silhouette 0.047, DB 1.302, 5% noise); Divisive scored 0.837 (silhouette 0.424, DB 0.865).
+**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.829 after a 17% noise discount), k=8 regions, silhouette 0.582, Davies-Bouldin 0.445; Agglomerative scored 0.183 at k=8 (silhouette 0.521, DB 0.670); Divisive scored 0.036 at k=8 (silhouette 0.485, DB 0.653). k chosen per method: DBSCAN=8, Agglomerative=8, Divisive=8.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   3 |        0.047 |            1.302 |           5 |              0     |
-| Agglomerative |   5 |        0.473 |            0.749 |           0 |              1     |
-| Divisive      |   5 |        0.424 |            0.865 |           0 |              0.837 |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   8 |        0.582 |            0.445 |        17.1 | False     |              0.829 |
+| Agglomerative |   8 |        0.521 |            0.67  |         0   | False     |              0.183 |
+| Divisive      |   8 |        0.485 |            0.653 |         0   | False     |              0.036 |
 
 ## poster_nancy
-**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.758 after a 24% noise discount), silhouette 0.696, Davies-Bouldin 0.387; Agglomerative scored 0.337 (silhouette 0.588, DB 0.557); Divisive scored 0.000 (silhouette 0.534, DB 0.644).
+**Winner: DBSCAN**  -  DBSCAN wins: highest separation score (0.792 after a 21% noise discount), k=5 regions, silhouette 0.646, Davies-Bouldin 0.428; Agglomerative scored 0.610 at k=4 (silhouette 0.588, DB 0.557); Divisive scored 0.000 at k=5 (silhouette 0.470, DB 0.714). k chosen per method: DBSCAN=5, Agglomerative=4, Divisive=5.
 
-| method        |   k |   silhouette |   davies_bouldin |   noise_pct |   separation_score |
-|:--------------|----:|-------------:|-----------------:|------------:|-------------------:|
-| DBSCAN        |   4 |        0.696 |            0.387 |        24.2 |              0.758 |
-| Agglomerative |   4 |        0.588 |            0.557 |         0   |              0.337 |
-| Divisive      |   4 |        0.534 |            0.644 |         0   |              0     |
+| method        |   k |   silhouette |   davies_bouldin |   noise_pct | crosses   |   separation_score |
+|:--------------|----:|-------------:|-----------------:|------------:|:----------|-------------------:|
+| DBSCAN        |   5 |        0.646 |            0.428 |        20.8 | False     |              0.792 |
+| Agglomerative |   4 |        0.588 |            0.557 |         0   | False     |              0.61  |
+| Divisive      |   5 |        0.47  |            0.714 |         0   | False     |              0     |

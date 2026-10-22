@@ -6,13 +6,16 @@ Participants pooled: 48
 ## poster_ArminHofman-1955
 
 - Dropped 178 stray/isolated fixations before clustering (7.3%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   3 |     0.750202 |         0.323725 |            14288.2  |    35 |            30 |     0.203696 | 1        |
-|   5 |     0.696887 |         0.461643 |             7798.34 |    25 |            15 |     0.209855 | 0.846438 |
-|   4 |     0.541081 |         0.432456 |             7868.89 |    28 |            15 |     0.117906 | 0.74155  |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |     0.750202 |         0.323725 |            14288.2  |    35 |            30 |    0.203696  | False     | True     |
+|   4 |     0.541081 |         0.432456 |             7868.89 |    28 |            15 |    0.117906  | True      | False    |
+|   5 |     0.696887 |         0.461643 |             7798.34 |    25 |            15 |    0.209855  | False     | False    |
+|   6 |     0.537602 |         0.54056  |             6241.47 |    30 |            20 |    0.173339  | False     | False    |
+|   7 |     0.442093 |         0.466466 |             3761.19 |    22 |             8 |    0.0923889 | True      | False    |
+|   8 |     0.497972 |         0.613591 |             4494.89 |    22 |            10 |    0.137264  | False     | False    |
 
 - Chosen k=3  ->  DBSCAN eps=35px, min_samples=30, silhouette=0.750, Davies-Bouldin=0.324
 - 20.4% of fixations were noise (folded into nearest region)
@@ -27,125 +30,150 @@ Participants pooled: 48
 ## poster_BarryCeck-1988
 
 - Dropped 140 stray/isolated fixations before clustering (5.2%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   4 |     0.130485 |         0.902917 |             639.853 |    55 |            15 |    0.0354086 | 0.856089 |
-|   3 |     0.155311 |         1.04469  |             926.714 |    60 |            18 |    0.0330739 | 0.704803 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |     0.155311 |         1.04469  |             926.714 |    60 |            18 |    0.0330739 | True      | False    |
+|   4 |     0.130485 |         0.902917 |             639.853 |    55 |            15 |    0.0354086 | True      | False    |
+|   6 |     0.135223 |         1.00275  |             594.148 |    50 |            15 |    0.0587549 | True      | False    |
+|   7 |     0.392531 |         0.865235 |            2292.57  |    55 |            20 |    0.0797665 | True      | True     |
 
-- Chosen k=4  ->  DBSCAN eps=55px, min_samples=15, silhouette=0.130, Davies-Bouldin=0.903
-- 3.5% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R1 -> R2 -> R3 -> R4
+- Chosen k=7  ->  DBSCAN eps=55px, min_samples=20, silhouette=0.393, Davies-Bouldin=0.865  _(all candidates crossed -- used anyway)_
+- 8.0% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R3 -> R2 -> R1 -> R5 -> R6 -> R7 -> R4
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               0 |            1 |          1965 |           75.6  |             172.8 |                  97.9 |            210 |                      100   |               1 |     1055   |      530.6 |
-|               1 |            2 |           431 |           16.68 |             173.8 |                   2.1 |           6044 |                      100   |               2 |      348.2 |      906.6 |
-|               2 |            3 |           152 |            6.86 |             202.8 |                   0   |           6246 |                       77.1 |               3 |     1419.2 |      572.7 |
-|               3 |            4 |            22 |            0.86 |             176.2 |                   0   |           8519 |                       35.4 |               4 |      365.2 |       48.6 |
+|               2 |            1 |           884 |           35.68 |             181.3 |                  37.5 |           2140 |                      100   |               3 |      995.4 |      838   |
+|               0 |            2 |           443 |           16.45 |             166.7 |                  43.8 |           1138 |                      100   |               2 |      974.1 |      401.1 |
+|               1 |            3 |           372 |           14.39 |             173.7 |                  16.7 |           1032 |                       97.9 |               1 |      899.5 |      126.2 |
+|               5 |            4 |           343 |           13.62 |             178.3 |                   0   |           7196 |                       95.8 |               7 |      357.1 |      943.2 |
+|               3 |            5 |           291 |           10.09 |             155.8 |                   0   |           4169 |                       93.8 |               4 |     1560.2 |      190.4 |
+|               6 |            6 |           151 |            6.78 |             201.6 |                   0   |           6143 |                       75   |               5 |     1418.3 |      574.3 |
+|               4 |            7 |            86 |            2.99 |             156.3 |                   2.1 |           6719 |                       87.5 |               6 |      303.6 |      743.9 |
 
 ## poster_DavidCarson
 
 - Dropped 131 stray/isolated fixations before clustering (5.0%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   5 |     0.525151 |         0.515103 |             3134.94 |    50 |            30 |    0.231732  | 1        |
-|   3 |     0.504036 |         0.725243 |             3288.76 |    60 |            25 |    0.0294711 | 0.413512 |
-|   4 |     0.418913 |         0.632187 |             2423.11 |    55 |            20 |    0.0270488 | 0.24058  |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |     0.504036 |         0.725243 |             3288.76 |    60 |            25 |    0.0294711 | False     | False    |
+|   4 |     0.418913 |         0.632187 |             2423.11 |    55 |            20 |    0.0270488 | False     | False    |
+|   5 |     0.525151 |         0.515103 |             3134.94 |    50 |            30 |    0.231732  | False     | False    |
+|   6 |     0.451407 |         0.560619 |             2451.53 |    55 |            30 |    0.147356  | False     | False    |
+|   7 |     0.449006 |         0.52182  |             2554.61 |    45 |            25 |    0.242632  | False     | True     |
+|   8 |     0.348286 |         0.60326  |             1993.84 |    55 |            25 |    0.0726686 | False     | False    |
 
-- Chosen k=5  ->  DBSCAN eps=50px, min_samples=30, silhouette=0.525, Davies-Bouldin=0.515
-- 23.2% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R1 -> R2 -> R3 -> R4 -> R5
+- Chosen k=7  ->  DBSCAN eps=45px, min_samples=25, silhouette=0.449, Davies-Bouldin=0.522
+- 24.3% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R1 -> R2 -> R3 -> R4 -> R7 -> R5 -> R6
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               1 |            1 |          1066 |           43.82 |             182.3 |                  75   |            370 |                      100   |               1 |      686.1 |      349   |
-|               0 |            2 |           623 |           25.25 |             179.8 |                  14.6 |           2597 |                      100   |               2 |      567.9 |      832.8 |
-|               3 |            3 |           596 |           23.71 |             176.4 |                   8.3 |           3431 |                      100   |               3 |     1482.5 |      552.6 |
-|               2 |            4 |           145 |            5.25 |             160.8 |                   2.1 |           4120 |                       89.6 |               4 |      255.2 |      179   |
-|               4 |            5 |            47 |            1.97 |             185.6 |                   0   |           6445 |                       56.2 |               5 |     1086   |      823   |
+|               1 |            1 |           915 |           38.11 |             184.7 |                  68.8 |            389 |                      100   |               1 |      637.4 |      363.7 |
+|               0 |            2 |           624 |           25.31 |             179.9 |                  14.6 |           2565 |                      100   |               2 |      567   |      832.1 |
+|               3 |            3 |           552 |           22.12 |             177.8 |                   8.3 |           3707 |                      100   |               3 |     1494   |      574.6 |
+|               2 |            4 |           142 |            5.18 |             161.8 |                   2.1 |           3855 |                       87.5 |               4 |      252.4 |      179.1 |
+|               4 |            5 |           128 |            4.96 |             171.9 |                   6.2 |           7512 |                       83.3 |               6 |      985.7 |      241.9 |
+|               5 |            6 |            67 |            2.29 |             151.9 |                   0   |           9467 |                       58.3 |               7 |     1286.1 |      244   |
+|               6 |            7 |            49 |            2.02 |             182.7 |                   0   |           6341 |                       58.3 |               5 |     1084   |      822.5 |
 
 ## poster_DavidCarson-1990
 
 - Dropped 146 stray/isolated fixations before clustering (5.9%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   5 |     0.532227 |         0.582353 |            4238.26  |    60 |            30 |    0.134904  | 1        |
-|   3 |     0.200976 |         0.931164 |             615.274 |    60 |            20 |    0.0432548 | 0.551649 |
-|   4 |     0.145249 |         0.892993 |             504.917 |    70 |            30 |    0.0501071 | 0.522939 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |     0.200976 |         0.931164 |             615.274 |    60 |            20 |    0.0432548 | False     | False    |
+|   4 |     0.145249 |         0.892993 |             504.917 |    70 |            30 |    0.0501071 | True      | False    |
+|   5 |     0.532227 |         0.582353 |            4238.26  |    60 |            30 |    0.134904  | False     | False    |
+|   6 |     0.560711 |         0.504153 |            3715.69  |    40 |            15 |    0.182869  | False     | False    |
+|   7 |     0.529409 |         0.48763  |            3428.79  |    45 |            20 |    0.182441  | False     | True     |
+|   8 |    -0.155814 |         1.21404  |             240.409 |    40 |            10 |    0.0753747 | True      | False    |
 
-- Chosen k=5  ->  DBSCAN eps=60px, min_samples=30, silhouette=0.532, Davies-Bouldin=0.582
-- 13.5% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R2 -> R3 -> R1 -> R4 -> R5
+- Chosen k=7  ->  DBSCAN eps=45px, min_samples=20, silhouette=0.529, Davies-Bouldin=0.488
+- 18.2% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R2 -> R3 -> R1 -> R4 -> R6 -> R7 -> R5
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               0 |            1 |           776 |           33.02 |             200.7 |                  25   |           1899 |                      100   |               3 |      610.4 |      735.6 |
-|               2 |            2 |           660 |           28.77 |             205.6 |                  41.7 |           1171 |                      100   |               1 |     1284.4 |      644.7 |
-|               1 |            3 |           642 |           26.64 |             195.8 |                  31.2 |           1174 |                      100   |               2 |      522.7 |      291.8 |
-|               4 |            4 |           152 |            6.66 |             206.6 |                   2.1 |           4525 |                       81.2 |               4 |     1363.5 |      310   |
-|               3 |            5 |           105 |            4.91 |             220.8 |                   0   |           8328 |                       66.7 |               5 |      670.8 |     1047.6 |
+|               0 |            1 |           782 |           33.23 |             200.5 |                  29.2 |           1770 |                      100   |               3 |      612.2 |      733.8 |
+|               1 |            2 |           638 |           26.53 |             196.1 |                  29.2 |           1178 |                      100   |               1 |      521.1 |      291.2 |
+|               2 |            3 |           551 |           23.87 |             204.3 |                  18.8 |           1549 |                      100   |               2 |     1326.9 |      621.4 |
+|               4 |            4 |           146 |            6.49 |             209.8 |                   2.1 |           4578 |                       81.2 |               4 |     1362.6 |      306.5 |
+|               3 |            5 |           104 |            4.89 |             221.9 |                   0   |           8690 |                       66.7 |               7 |      670.7 |     1048.1 |
+|               5 |            6 |            76 |            3.29 |             204.4 |                  18.8 |           5598 |                       79.2 |               5 |     1012.9 |      633.5 |
+|               6 |            7 |            38 |            1.69 |             210.3 |                   2.1 |           8231 |                       37.5 |               6 |     1238   |      988.5 |
 
 ## poster_EllaRosenblatt-2021
 
 - Dropped 163 stray/isolated fixations before clustering (6.4%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |   score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|--------:|
-|   5 |     0.500198 |         0.532127 |             3284.35 |    35 |            20 |    0.0898405 |       1 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   5 |     0.500198 |         0.532127 |             3284.35 |    35 |            20 |    0.0898405 | True      | False    |
+|   6 |     0.697077 |         0.397377 |            10688.2  |    35 |            30 |    0.212427  | False     | True     |
+|   7 |     0.577004 |         0.440815 |             8521.1  |    30 |            20 |    0.191436  | True      | False    |
+|   8 |     0.561886 |         0.435429 |             6657.12 |    30 |            18 |    0.149874  | False     | False    |
 
-- Chosen k=5  ->  DBSCAN eps=35px, min_samples=20, silhouette=0.500, Davies-Bouldin=0.532
-- 9.0% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R1 -> R2 -> R3 -> R5 -> R4
+- Chosen k=6  ->  DBSCAN eps=35px, min_samples=30, silhouette=0.697, Davies-Bouldin=0.397
+- 21.2% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R1 -> R2 -> R3 -> R5 -> R4 -> R6
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               0 |            1 |          1287 |           53.98 |             209.3 |                  83.3 |            389 |                      100   |               1 |      866.9 |      685.9 |
-|               2 |            2 |           543 |           21.36 |             196.3 |                  14.6 |           3570 |                      100   |               2 |     1115.9 |      205.3 |
-|               1 |            3 |           407 |           18.74 |             229.8 |                   0   |           4990 |                       95.8 |               3 |     1046.6 |     1084.2 |
-|               3 |            4 |            81 |            3.57 |             219.8 |                   0   |           8577 |                       77.1 |               5 |      656.3 |     1100.5 |
-|               4 |            5 |            64 |            2.34 |             182.7 |                   2.1 |           6636 |                       72.9 |               4 |     1066   |      826.3 |
+|               0 |            1 |           750 |           30.23 |             201.1 |                  77.1 |            415 |                      100   |               1 |      937.9 |      581.6 |
+|               1 |            2 |           563 |           24.72 |             219.1 |                   8.3 |           2411 |                      100   |               2 |      788.2 |      816.8 |
+|               2 |            3 |           543 |           21.36 |             196.3 |                  14.6 |           3570 |                      100   |               3 |     1115.9 |      205.3 |
+|               3 |            4 |           295 |           13.42 |             227.1 |                   0   |           6461 |                       93.8 |               5 |     1094.1 |     1092.5 |
+|               4 |            5 |           150 |            6.69 |             222.5 |                   0   |           4963 |                       93.8 |               4 |      954.3 |     1023.1 |
+|               5 |            6 |            81 |            3.57 |             219.8 |                   0   |           8577 |                       77.1 |               6 |      656.3 |     1100.5 |
 
 ## poster_IrisChung-2015
 
 - Dropped 105 stray/isolated fixations before clustering (4.1%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   3 |     0.398754 |         0.521078 |             987.004 |    55 |            25 |    0.0290151 | 1        |
-|   5 |     0.255649 |         0.728412 |             819.793 |    45 |            20 |    0.0698815 | 0.705447 |
-|   4 |     0.194601 |         0.767782 |             721.651 |    60 |            30 |    0.0245198 | 0.609861 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |     0.398754 |         0.521078 |             987.004 |    55 |            25 |    0.0290151 | False     | False    |
+|   4 |     0.194601 |         0.767782 |             721.651 |    60 |            30 |    0.0245198 | True      | False    |
+|   5 |     0.255649 |         0.728412 |             819.793 |    45 |            20 |    0.0698815 | True      | False    |
+|   6 |     0.442639 |         0.547264 |            1937.11  |    40 |            18 |    0.0980793 | False     | False    |
+|   7 |     0.400131 |         0.561146 |            1667.12  |    35 |            12 |    0.0719248 | False     | True     |
+|   8 |     0.367147 |         0.58094  |            1846.22  |    45 |            25 |    0.112791  | True      | False    |
 
-- Chosen k=3  ->  DBSCAN eps=55px, min_samples=25, silhouette=0.399, Davies-Bouldin=0.521
-- 2.9% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R1 -> R2 -> R3
+- Chosen k=7  ->  DBSCAN eps=35px, min_samples=12, silhouette=0.400, Davies-Bouldin=0.561
+- 7.2% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R1 -> R2 -> R3 -> R4 -> R6 -> R5 -> R7
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               0 |            1 |          1998 |           80.05 |             198.3 |                   100 |            241 |                      100   |               1 |      933.6 |      527.9 |
-|               2 |            2 |           272 |           11.48 |             208.8 |                     0 |           6934 |                       95.8 |               2 |      738.7 |     1111.6 |
-|               1 |            3 |           177 |            8.47 |             236.8 |                     0 |           8867 |                       95.8 |               3 |     1218.4 |     1094.8 |
+|               0 |            1 |          1205 |           43.83 |             180   |                  89.6 |            346 |                      100   |               1 |      962.7 |      320.4 |
+|               1 |            2 |           389 |           17.27 |             219.8 |                   6.2 |           4793 |                      100   |               2 |      979.9 |      834.1 |
+|               2 |            3 |           286 |           13.95 |             241.4 |                   2.1 |           5475 |                       97.9 |               3 |      694.7 |      730   |
+|               5 |            4 |           272 |           11.48 |             208.8 |                   0   |           6934 |                       95.8 |               4 |      738.7 |     1111.6 |
+|               4 |            5 |           160 |            7.66 |             237   |                   0   |           8925 |                       95.8 |               6 |     1231.5 |     1091.5 |
+|               3 |            6 |            96 |            4.05 |             208.9 |                   0   |           7132 |                       79.2 |               5 |     1228.9 |      631.1 |
+|               6 |            7 |            39 |            1.76 |             223.9 |                   2.1 |          10185 |                       45.8 |               7 |     1041.5 |     1121.6 |
 
 ## poster_JanTschichold-1927-DieFrauohneNamen
 
 - Dropped 162 stray/isolated fixations before clustering (6.6%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   7 |     0.625883 |         0.444253 |             5933.26 |    35 |            20 |    0.0881076 | 0.979735 |
-|   9 |     0.63319  |         0.474648 |             7119.99 |    28 |            15 |    0.143229  | 0.879735 |
-|   6 |     0.600696 |         0.531424 |             4398.78 |    30 |            15 |    0.106337  | 0.564984 |
-|   8 |     0.510264 |         0.57062  |             3254.44 |    25 |            10 |    0.115451  | 0.159127 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   6 |     0.600696 |         0.531424 |             4398.78 |    30 |            15 |    0.106337  | False     | False    |
+|   7 |     0.625883 |         0.444253 |             5933.26 |    35 |            20 |    0.0881076 | False     | True     |
+|   8 |     0.510264 |         0.57062  |             3254.44 |    25 |            10 |    0.115451  | True      | False    |
 
-- Chosen k=7  ->  DBSCAN eps=35px, min_samples=20, silhouette=0.626, Davies-Bouldin=0.444  _(relaxed grid)_
+- Chosen k=7  ->  DBSCAN eps=35px, min_samples=20, silhouette=0.626, Davies-Bouldin=0.444
 - 8.8% of fixations were noise (folded into nearest region)
 - Aggregate viewing order: R1 -> R5 -> R3 -> R6 -> R4 -> R2 -> R7
 
@@ -162,16 +190,15 @@ Participants pooled: 48
 ## poster_JanTschichold-1938-Der
 
 - Dropped 239 stray/isolated fixations before clustering (9.4%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   6 |     0.60753  |         0.530918 |             6018.24 |    45 |            30 |    0.0200087 | 1        |
-|   9 |     0.587616 |         0.583662 |             6348.18 |    35 |            25 |    0.0782949 | 0.81586  |
-|   8 |     0.560433 |         0.635586 |             5084.69 |    28 |            12 |    0.0630709 | 0.607402 |
-|   7 |     0.577295 |         0.66403  |             5870.3  |    30 |            15 |    0.0674206 | 0.607073 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   6 |     0.60753  |         0.530918 |             6018.24 |    45 |            30 |    0.0200087 | False     | True     |
+|   7 |     0.577295 |         0.66403  |             5870.3  |    30 |            15 |    0.0674206 | False     | False    |
+|   8 |     0.560433 |         0.635586 |             5084.69 |    28 |            12 |    0.0630709 | False     | False    |
 
-- Chosen k=6  ->  DBSCAN eps=45px, min_samples=30, silhouette=0.608, Davies-Bouldin=0.531  _(relaxed grid)_
+- Chosen k=6  ->  DBSCAN eps=45px, min_samples=30, silhouette=0.608, Davies-Bouldin=0.531
 - 2.0% of fixations were noise (folded into nearest region)
 - Aggregate viewing order: R2 -> R1 -> R3 -> R5 -> R6 -> R4
 
@@ -187,58 +214,70 @@ Participants pooled: 48
 ## poster_JoostSchmidt-1923-Saatliches
 
 - Dropped 140 stray/isolated fixations before clustering (5.6%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |   score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|--------:|
-|   5 |     0.515011 |         0.458561 |             2277.38 |    30 |            15 |    0.0572161 |       1 |
-|   4 |     0.475004 |         0.525862 |             1810.76 |    35 |            18 |    0.0320239 |       0 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   4 |     0.475004 |         0.525862 |             1810.76 |    35 |            18 |    0.0320239 | False     | False    |
+|   5 |     0.515011 |         0.458561 |             2277.38 |    30 |            15 |    0.0572161 | False     | False    |
+|   6 |     0.47681  |         0.482874 |             2519.92 |    35 |            25 |    0.0828352 | False     | True     |
+|   7 |     0.325863 |         0.50726  |             1504.57 |    22 |             8 |    0.060205  | False     | False    |
+|   8 |     0.304089 |         0.588751 |             1932.58 |    25 |            12 |    0.087959  | True      | False    |
 
-- Chosen k=5  ->  DBSCAN eps=30px, min_samples=15, silhouette=0.515, Davies-Bouldin=0.459
-- 5.7% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R2 -> R1 -> R4 -> R3 -> R5
+- Chosen k=6  ->  DBSCAN eps=35px, min_samples=25, silhouette=0.477, Davies-Bouldin=0.483
+- 8.3% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R2 -> R1 -> R3 -> R5 -> R4 -> R6
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               2 |            1 |          1186 |           52.7  |             216.4 |                  41.7 |           1343 |                      100   |               2 |      922.6 |      749.2 |
-|               0 |            2 |           728 |           27.91 |             186.7 |                  52.1 |            708 |                      100   |               1 |      788.5 |      304.9 |
-|               3 |            3 |           170 |            7.72 |             221.1 |                   0   |           7054 |                       91.7 |               4 |     1253.1 |      630.6 |
-|               1 |            4 |           196 |            7.59 |             188.6 |                   6.2 |           4292 |                      100   |               3 |     1082.3 |      448.3 |
-|               4 |            5 |            62 |            4.09 |             321.4 |                   0   |           8008 |                       60.4 |               5 |     1327.6 |       92   |
+|               1 |            1 |          1031 |           45.8  |             216.4 |                  41.7 |           1348 |                      100   |               2 |      950.3 |      732.5 |
+|               0 |            2 |           724 |           27.76 |             186.8 |                  52.1 |            708 |                      100   |               1 |      787.6 |      304.2 |
+|               5 |            3 |           203 |            7.86 |             188.5 |                   6.2 |           4132 |                      100   |               3 |     1079.6 |      449.4 |
+|               3 |            4 |           170 |            7.72 |             221.1 |                   0   |           7054 |                       91.7 |               5 |     1253.1 |      630.6 |
+|               2 |            5 |           152 |            6.78 |             217.3 |                   0   |           6133 |                       89.6 |               4 |      733   |      865.6 |
+|               4 |            6 |            62 |            4.09 |             321.4 |                   0   |           8008 |                       60.4 |               6 |     1327.6 |       92   |
 
 ## poster_PaulRand-1947
 
 - Dropped 99 stray/isolated fixations before clustering (3.8%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |     score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|----------:|
-|   5 |     0.475747 |         0.519262 |            1938.99  |    45 |            20 |    0.0977778 | 0.944194  |
-|   4 |     0.503198 |         0.580651 |            2069.79  |    55 |            25 |    0.0549495 | 0.794986  |
-|   3 |     0.296353 |         0.668981 |             477.408 |    45 |            12 |    0.0238384 | 0.0794996 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |     0.296353 |         0.668981 |             477.408 |    45 |            12 |    0.0238384 | False     | False    |
+|   4 |     0.503198 |         0.580651 |            2069.79  |    55 |            25 |    0.0549495 | False     | False    |
+|   5 |     0.475747 |         0.519262 |            1938.99  |    45 |            20 |    0.0977778 | False     | False    |
+|   6 |     0.583523 |         0.408153 |            2344.64  |    40 |            25 |    0.197172  | False     | False    |
+|   7 |     0.599817 |         0.389224 |            2128.28  |    30 |            15 |    0.222222  | False     | True     |
+|   8 |     0.575603 |         0.45737  |            3643.88  |    40 |            30 |    0.235152  | False     | False    |
 
-- Chosen k=5  ->  DBSCAN eps=45px, min_samples=20, silhouette=0.476, Davies-Bouldin=0.519
-- 9.8% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R1 -> R2 -> R3 -> R5 -> R4
+- Chosen k=7  ->  DBSCAN eps=30px, min_samples=15, silhouette=0.600, Davies-Bouldin=0.389
+- 22.2% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R1 -> R3 -> R4 -> R2 -> R6 -> R7 -> R5
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               0 |            1 |          1449 |           55.97 |             190.8 |                  97.9 |            209 |                      100   |               1 |      756.8 |      603   |
-|               1 |            2 |           625 |           27.33 |             216   |                   2.1 |           3547 |                      100   |               2 |     1002.2 |     1031.1 |
-|               3 |            3 |           254 |           10.45 |             203.1 |                   0   |           4961 |                       95.8 |               3 |     1225.8 |      378.6 |
-|               2 |            4 |            71 |            3.28 |             227.9 |                   0   |           9678 |                       60.4 |               5 |      630.6 |     1095.1 |
-|               4 |            5 |            76 |            2.97 |             193.1 |                   0   |           8378 |                       79.2 |               4 |     1280.6 |      639.7 |
+|               0 |            1 |          1441 |           55.64 |             190.7 |                  97.9 |            209 |                      100   |               1 |      755.1 |      602.6 |
+|               1 |            2 |           389 |           16.08 |             204.1 |                   0   |           5081 |                      100   |               4 |      893.4 |     1079.1 |
+|               2 |            3 |           241 |           11.49 |             235.4 |                   2.1 |           4209 |                       97.9 |               2 |     1153.6 |      960.2 |
+|               4 |            4 |           197 |            8.19 |             205.2 |                   0   |           5076 |                       93.8 |               3 |     1194.7 |      424   |
+|               3 |            5 |            70 |            3.24 |             228.7 |                   0   |           9678 |                       60.4 |               7 |      629.7 |     1096.8 |
+|               5 |            6 |            75 |            2.93 |             192.7 |                   0   |           8384 |                       79.2 |               5 |     1282.6 |      640   |
+|               6 |            7 |            62 |            2.45 |             194.9 |                   0   |           8660 |                       62.5 |               6 |     1319.9 |      234.5 |
 
 ## poster_PaulaScher-1995
 
 - Dropped 77 stray/isolated fixations before clustering (2.8%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   4 |     0.280224 |         0.718152 |             1358.93 |    60 |            30 |    0.0321483 | 0.995868 |
-|   3 |     0.275852 |         0.813801 |             1599.32 |    45 |            15 |    0.0257186 | 0.68707  |
-|   5 |     0.130606 |         0.802825 |             1033.87 |    45 |            18 |    0.051059  | 0.272741 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |    0.275852  |         0.813801 |            1599.32  |    45 |            15 |    0.0257186 | False     | False    |
+|   4 |    0.280224  |         0.718152 |            1358.93  |    60 |            30 |    0.0321483 | False     | True     |
+|   5 |    0.130606  |         0.802825 |            1033.87  |    45 |            18 |    0.051059  | True      | False    |
+|   6 |    0.261357  |         0.560131 |            1361.45  |    50 |            30 |    0.192511  | True      | False    |
+|   7 |    0.0596065 |         0.751457 |             709.148 |    50 |            25 |    0.091528  | True      | False    |
+|   8 |    0.123379  |         0.732965 |             982.654 |    40 |            20 |    0.212179  | True      | False    |
 
 - Chosen k=4  ->  DBSCAN eps=60px, min_samples=30, silhouette=0.280, Davies-Bouldin=0.718
 - 3.2% of fixations were noise (folded into nearest region)
@@ -254,84 +293,106 @@ Participants pooled: 48
 ## poster_ScottBarry-2010
 
 - Dropped 174 stray/isolated fixations before clustering (6.6%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   5 |     0.524233 |         0.583897 |              3826.7 |    40 |            15 |    0.0244698 | 0.993207 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   5 |     0.524233 |         0.583897 |             3826.7  |    40 |            15 |    0.0244698 | False     | False    |
+|   6 |     0.457408 |         0.588992 |             3144.6  |    45 |            20 |    0.0269168 | False     | True     |
+|   7 |     0.433535 |         0.64237  |             2925.17 |    35 |            15 |    0.0636215 | False     | False    |
+|   8 |     0.655988 |         0.470043 |             8069.82 |    35 |            30 |    0.221044  | True      | False    |
 
-- Chosen k=5  ->  DBSCAN eps=40px, min_samples=15, silhouette=0.524, Davies-Bouldin=0.584
-- 2.4% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R1 -> R3 -> R2 -> R5 -> R4
+- Chosen k=6  ->  DBSCAN eps=45px, min_samples=20, silhouette=0.457, Davies-Bouldin=0.589
+- 2.7% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R1 -> R3 -> R2 -> R4 -> R5 -> R6
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               0 |            1 |          1020 |           41.43 |             196.1 |                  60.4 |           1027 |                      100   |               1 |     1040.4 |      655.4 |
-|               3 |            2 |           491 |           20.33 |             199.9 |                   8.3 |           2856 |                      100   |               3 |      930.3 |      965.7 |
-|               1 |            3 |           421 |           15.23 |             174.7 |                  31.2 |           1460 |                      100   |               2 |      815.3 |      205.6 |
-|               4 |            4 |           253 |           11.9  |             227.2 |                   0   |           7641 |                       97.9 |               5 |     1250.2 |     1049.7 |
-|               2 |            5 |           267 |           11.1  |             200.8 |                   0   |           4374 |                       95.8 |               4 |     1241.7 |      134.3 |
+|               0 |            1 |          1026 |           41.65 |             196   |                  62.5 |            968 |                      100   |               1 |     1039.9 |      655   |
+|               3 |            2 |           489 |           20.28 |             200.3 |                   8.3 |           2898 |                      100   |               3 |      930.2 |      966.1 |
+|               1 |            3 |           418 |           15.11 |             174.5 |                  29.2 |           1474 |                      100   |               2 |      815.2 |      203.9 |
+|               2 |            4 |           267 |           11.1  |             200.8 |                   0   |           4374 |                       95.8 |               4 |     1241.7 |      134.3 |
+|               4 |            5 |           209 |            9.78 |             225.8 |                   0   |           7693 |                       97.9 |               5 |     1276.4 |     1066.1 |
+|               5 |            6 |            43 |            2.09 |             234.5 |                   0   |           8818 |                       35.4 |               6 |     1127.9 |      974.9 |
 
 ## poster_SeanAlatorre
 
 - Dropped 96 stray/isolated fixations before clustering (3.9%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   5 |     0.582858 |         0.462472 |            2731.27  |    45 |            25 |    0.113359  | 0.999408 |
-|   4 |     0.296765 |         0.618447 |             728.682 |    60 |            25 |    0.0332912 | 0        |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   4 |     0.296765 |         0.618447 |             728.682 |    60 |            25 |    0.0332912 | False     | False    |
+|   5 |     0.582858 |         0.462472 |            2731.27  |    45 |            25 |    0.113359  | True      | False    |
+|   6 |     0.495711 |         0.504288 |            2021.46  |    50 |            18 |    0.0387695 | False     | False    |
+|   7 |     0.606998 |         0.484091 |            4093.96  |    35 |            15 |    0.140329  | False     | False    |
+|   8 |     0.599953 |         0.474892 |            3905.17  |    30 |            15 |    0.194269  | False     | True     |
 
-- Chosen k=5  ->  DBSCAN eps=45px, min_samples=25, silhouette=0.583, Davies-Bouldin=0.462
-- 11.3% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R1 -> R2 -> R3 -> R4 -> R5
+- Chosen k=8  ->  DBSCAN eps=30px, min_samples=15, silhouette=0.600, Davies-Bouldin=0.475
+- 19.4% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R1 -> R2 -> R3 -> R4 -> R8 -> R5 -> R6 -> R7
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               1 |            1 |          1216 |           52.81 |             216.9 |                  66.7 |           1169 |                      100   |               1 |     1074.9 |      665.8 |
-|               0 |            2 |           547 |           21.75 |             198.6 |                  31.2 |           1670 |                      100   |               2 |      869.1 |      228.2 |
+|               1 |            1 |           790 |           33.41 |             211.3 |                  62.5 |           1258 |                      100   |               1 |      986.2 |      605.6 |
+|               0 |            2 |           547 |           21.71 |             198.3 |                  31.2 |           1670 |                      100   |               2 |      868.7 |      228   |
 |               3 |            3 |           441 |           17.38 |             196.9 |                   2.1 |           2149 |                       95.8 |               3 |     1262.9 |      127.7 |
-|               2 |            4 |            96 |            4.87 |             253.6 |                   0   |           7618 |                       83.3 |               4 |      963   |     1000   |
-|               4 |            5 |            73 |            3.19 |             218.5 |                   0   |           8176 |                       58.3 |               5 |      672.8 |      964.2 |
+|               4 |            4 |           290 |           13.74 |             236.7 |                   2.1 |           5623 |                       97.9 |               4 |     1248.6 |      714.6 |
+|               2 |            5 |           101 |            5.01 |             247.6 |                   0   |           7598 |                       83.3 |               6 |      962.3 |      998.3 |
+|               7 |            6 |            77 |            3.37 |             219   |                   0   |           8184 |                       62.5 |               7 |     1226.9 |      956.2 |
+|               5 |            7 |            71 |            3.14 |             220.8 |                   0   |           8324 |                       56.2 |               8 |      670.3 |      964.7 |
+|               6 |            8 |            56 |            2.24 |             199.7 |                   2.1 |           7026 |                       60.4 |               5 |     1105.1 |      812.7 |
 
 ## poster_bookcover
 
 - Dropped 103 stray/isolated fixations before clustering (4.0%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   3 |    0.0467825 |          1.30152 |            158.408  |    30 |            10 |    0.0496994 | 0.571417 |
-|   5 |   -0.299137  |          1.12211 |             85.3074 |    28 |             8 |    0.0408818 | 0.5      |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |    0.0467825 |         1.30152  |            158.408  |    30 |            10 |    0.0496994 | True      | False    |
+|   5 |   -0.299137  |         1.12211  |             85.3074 |    28 |             8 |    0.0408818 | True      | False    |
+|   6 |    0.520415  |         0.570709 |           4100.18   |    45 |            30 |    0.0681363 | False     | False    |
+|   7 |    0.64402   |         0.418577 |           6700.43   |    28 |            20 |    0.247295  | False     | False    |
+|   8 |    0.582064  |         0.444527 |           5552.76   |    28 |            15 |    0.171142  | False     | True     |
 
-- Chosen k=3  ->  DBSCAN eps=30px, min_samples=10, silhouette=0.047, Davies-Bouldin=1.302
-- 5.0% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R1 -> R2 -> R3
+- Chosen k=8  ->  DBSCAN eps=28px, min_samples=15, silhouette=0.582, Davies-Bouldin=0.445
+- 17.1% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R1 -> R2 -> R5 -> R6 -> R4 -> R3 -> R8 -> R7
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               0 |            1 |          2136 |           83.68 |             197.3 |                  97.9 |            246 |                      100   |               1 |      989.5 |      545.6 |
-|               1 |            2 |           209 |            8.66 |             208.7 |                   2.1 |           4272 |                      100   |               2 |     1178.3 |      650.3 |
-|               2 |            3 |           150 |            7.65 |             256.9 |                   0   |           6188 |                       95.8 |               3 |      765.1 |      887   |
+|               0 |            1 |           634 |           21.37 |             169.7 |                  77.1 |            649 |                      100   |               1 |      878.1 |      512.1 |
+|               3 |            2 |           533 |           19.77 |             186.8 |                  10.4 |           2785 |                      100   |               2 |     1090.3 |      179.8 |
+|               5 |            3 |           434 |           19    |             220.5 |                   0   |           4755 |                      100   |               6 |     1078.2 |      992.7 |
+|               7 |            4 |           273 |           12.25 |             225.9 |                   4.2 |           4528 |                       97.9 |               5 |      976.6 |      773   |
+|               6 |            5 |           211 |            9.72 |             231.9 |                   6.2 |           3102 |                       97.9 |               3 |      851.3 |      219   |
+|               2 |            6 |           217 |            8.86 |             205.7 |                   2.1 |           4272 |                      100   |               4 |     1175.5 |      649.3 |
+|               4 |            7 |           151 |            7.67 |             255.9 |                   0   |           6188 |                       95.8 |               8 |      764.6 |      886.1 |
+|               1 |            8 |            42 |            1.36 |             162.5 |                   0   |           4830 |                       47.9 |               7 |     1136.4 |      418.1 |
 
 ## poster_nancy
 
 - Dropped 265 stray/isolated fixations before clustering (10.9%)
-- Number of regions (k) chosen by best combined separation score (silhouette + Davies-Bouldin) across k=3..5:
+- Number of regions (k) across k=3..8, decided by: Davies-Bouldin primary, silhouette secondary check, crossing regions disqualified, most clusters wins among what survives:
 
-|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac |    score |
-|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|---------:|
-|   4 |     0.695826 |         0.387123 |             7043.02 |    25 |            20 |     0.242115 | 1        |
-|   5 |     0.645857 |         0.42796  |             5475.58 |    25 |            18 |     0.207792 | 0.911359 |
-|   3 |     0.563202 |         0.520029 |             2768.11 |    40 |            30 |     0.12013  | 0.735915 |
+|   k |   silhouette |   davies_bouldin |   calinski_harabasz |   eps |   min_samples |   noise_frac | crosses   | chosen   |
+|----:|-------------:|-----------------:|--------------------:|------:|--------------:|-------------:|:----------|:---------|
+|   3 |     0.563202 |         0.520029 |             2768.11 |    40 |            30 |     0.12013  | False     | False    |
+|   4 |     0.695826 |         0.387123 |             7043.02 |    25 |            20 |     0.242115 | False     | False    |
+|   5 |     0.645857 |         0.42796  |             5475.58 |    25 |            18 |     0.207792 | False     | True     |
+|   6 |     0.540812 |         0.489852 |             4463.87 |    22 |            15 |     0.234694 | True      | False    |
+|   7 |     0.493371 |         0.494154 |             3741.72 |    20 |            12 |     0.238868 | True      | False    |
+|   8 |     0.380708 |         0.54079  |             3153.47 |    22 |            12 |     0.180427 | True      | False    |
 
-- Chosen k=4  ->  DBSCAN eps=25px, min_samples=20, silhouette=0.696, Davies-Bouldin=0.387
-- 24.2% of fixations were noise (folded into nearest region)
-- Aggregate viewing order: R3 -> R2 -> R1 -> R4
+- Chosen k=5  ->  DBSCAN eps=25px, min_samples=18, silhouette=0.646, Davies-Bouldin=0.428
+- 20.8% of fixations were noise (folded into nearest region)
+- Aggregate viewing order: R2 -> R3 -> R1 -> R4 -> R5
 
 |   region_raw_id |   region_num |   n_fixations |   pct_gaze_time |   avg_fixation_ms |   first_attention_pct |   avg_entry_ms |   participant_coverage_pct |   viewing_order |   center_x |   center_y |
 |----------------:|-------------:|--------------:|----------------:|------------------:|----------------------:|---------------:|---------------------------:|----------------:|-----------:|-----------:|
-|               3 |            1 |           777 |           40.94 |             259.3 |                   6.2 |           2822 |                        100 |               3 |     1093.1 |      780.4 |
-|               0 |            2 |           533 |           22.3  |             205.9 |                  41.7 |           1283 |                        100 |               2 |      867.1 |      272.9 |
-|               1 |            3 |           535 |           22.29 |             205.1 |                  50   |            746 |                        100 |               1 |      851.7 |      585.5 |
-|               2 |            4 |           311 |           14.48 |             229.1 |                   2.1 |           3856 |                        100 |               4 |      805.4 |      906.3 |
+|               3 |            1 |           774 |           40.86 |             259.8 |                   6.2 |           2826 |                      100   |               3 |     1093.3 |      780.2 |
+|               1 |            2 |           536 |           22.32 |             205   |                  52.1 |            677 |                      100   |               1 |      851.7 |      585.3 |
+|               0 |            3 |           532 |           22.27 |             206   |                  39.6 |           1297 |                      100   |               2 |      867.1 |      272.7 |
+|               2 |            4 |           271 |           12.36 |             224.5 |                   2.1 |           4079 |                      100   |               4 |      786.6 |      896.3 |
+|               4 |            5 |            43 |            2.19 |             250.6 |                   0   |           7569 |                       52.1 |               5 |      917.3 |      963.3 |

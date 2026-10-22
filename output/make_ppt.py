@@ -212,29 +212,38 @@ def add_poster_slide(prs, poster_key: str, label: str, comparison_row: pd.Series
     p2.font.size = Pt(11); p2.font.color.rgb = INK
     p2.space_before = Pt(6)
 
-    # row 2: path jpg + animation video
-    media_w = 4.6
+    # row 2: path jpg + scanpath plot + animation video (winning method, 3-up)
+    media_w = 3.9
     media_h = media_w / 1.5
+    media_gap = 0.2
     row2_top = row1_top + thumb_h + 0.3 + 0.2
-    total_w = media_w * 2 + 0.3
+    total_w = media_w * 3 + media_gap * 2
     row2_left = (13.333 - total_w) / 2
 
     sdir = SUMMARY_DIR / poster_key
     jpg_path = sdir / "path.jpg"
+    scanpath_path = sdir / "scanpath_plot.png"
     mp4_path = sdir / "path_animation.mp4"
 
-    if jpg_path.exists():
-        slide.shapes.add_picture(str(jpg_path), Inches(row2_left), Inches(row2_top), width=Inches(media_w))
-    cap1 = slide.shapes.add_textbox(Inches(row2_left), Inches(row2_top + media_h + 0.03),
-                                    Inches(media_w), Inches(0.3))
-    c1p = cap1.text_frame.paragraphs[0]
-    c1p.text = f"Path ({winner})"
-    c1p.font.size = Pt(12); c1p.font.italic = True; c1p.font.color.rgb = MUTED
-    c1p.alignment = PP_ALIGN.CENTER
+    media_items = [
+        (jpg_path, f"Region path ({winner})"),
+        (scanpath_path, f"Scanpath ({winner})"),
+    ]
+    for i, (img_path, caption) in enumerate(media_items):
+        left = row2_left + i * (media_w + media_gap)
+        if img_path.exists():
+            slide.shapes.add_picture(str(img_path), Inches(left), Inches(row2_top), width=Inches(media_w))
+        cap = slide.shapes.add_textbox(Inches(left), Inches(row2_top + media_h + 0.03),
+                                       Inches(media_w), Inches(0.3))
+        cp = cap.text_frame.paragraphs[0]
+        cp.text = caption
+        cp.font.size = Pt(12); cp.font.italic = True; cp.font.color.rgb = MUTED
+        cp.alignment = PP_ALIGN.CENTER
 
-    video_left = row2_left + media_w + 0.3
+    video_left = row2_left + 2 * (media_w + media_gap)
     if mp4_path.exists():
-        poster_frame = str(jpg_path) if jpg_path.exists() else None
+        poster_frame = str(scanpath_path) if scanpath_path.exists() else (
+            str(jpg_path) if jpg_path.exists() else None)
         slide.shapes.add_movie(str(mp4_path), Inches(video_left), Inches(row2_top),
                                Inches(media_w), Inches(media_h),
                                poster_frame_image=poster_frame, mime_type="video/mp4")
@@ -268,21 +277,40 @@ def main():
         "DBSCAN (sklearn.cluster.DBSCAN)",
         ("Default eps=0.5, min_samples=5 are meaningless at 1936×1208 pixel scale — grid-searched "
          "eps ∈ {18…80}px × min_samples ∈ {8…30} instead", 1),
-        ("k (region count) chosen from a narrowed 3–5 range (not the default unconstrained "
-         "cluster count DBSCAN would otherwise find)", 1),
-        ("Selection criterion is a combined silhouette + Davies-Bouldin \"separation\" score, not "
-         "silhouette alone — and the noise-fraction gate (2–25%, capped at 40% on fallback) "
-         "stops DBSCAN from \"winning\" via a tiny ultra-dense core with most points discarded", 1),
+        ("Noise-fraction gate (2–25%, capped at 40% on fallback) stops DBSCAN from \"winning\" via a "
+         "tiny ultra-dense core with most points silently discarded", 1),
         "Agglomerative (scipy.cluster.hierarchy.linkage)",
         ("Linkage changed from scipy's default 'single' (chains nearest-neighbour pairs into long, "
          "stringy clusters) to 'ward' (minimizes within-cluster variance → compact, convex regions)", 1),
-        ("Cut height (k) chosen 3–5 by the same combined separation score", 1),
         "Divisive (bisecting k-means — hand-built; scikit-learn has no divisive clustering class)",
         ("Each 2-way split's inner KMeans uses n_init=10 (explicit, not version-dependent 'auto') "
          "and random_state=42 (sklearn default is None / non-reproducible)", 1),
         ("Split-selection rule is deliberate: always bisect the cluster with the largest current SSE, "
          "so splits are spent where they most increase separation", 1),
-        ("k chosen 3–5 by the same combined separation score", 1),
+        "All three: k is searched over a wide 3–8 range, not fixed",
+        ("Which k actually gets used is decided by the rule on the next slide — Davies-Bouldin first, "
+         "silhouette as a check, and a hard requirement that regions don't spatially overlap", 1),
+    ])
+
+    add_bullet_slide(prs, "Choosing the Number of Regions (k)", [
+        "The decision rule applied identically by DBSCAN, Agglomerative and Divisive (decide_k):",
+        ("1. Davies-Bouldin is PRIMARY: keep only candidate k's within 15% of the best "
+         "(lowest) Davies-Bouldin score — DB directly measures how compact regions are "
+         "relative to how far apart they sit, which is exactly \"distinctness\"", 1),
+        ("2. Silhouette is the SECONDARY check: among those, keep only the ones within 15% of "
+         "the best silhouette in that narrowed set, so a k that won on DB alone but has a "
+         "clearly worse silhouette gets dropped", 1),
+        ("3. Crossing regions are disqualified outright: for every candidate k, each region's "
+         "convex hull is tested against every other region's hull (separating-axis test) — if "
+         "any two overlap, that k is thrown out regardless of its metrics", 1),
+        ("4. Among whatever survives steps 1–3, the LARGEST k wins — more, smaller, still-distinct "
+         "regions are preferred over fewer, larger ones", 1),
+        "Why this order: Davies-Bouldin and silhouette can both be fooled by one tiny, "
+        "artificially tight cluster; the crossing check catches what neither metric sees on its "
+        "own — two \"distinct\" clusters that still visually overlap on the poster.",
+        "Each poster's winning method is then picked by re-scoring the three methods' own "
+        "decisions against each other (see Results table) — so the final choice reflects both "
+        "within-method rigor and across-method comparison.",
     ])
 
     add_results_table_slide(prs, comparison.reset_index(drop=True))

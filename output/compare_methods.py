@@ -3,17 +3,18 @@
 Compare DBSCAN / Agglomerative / Divisive clustering results per poster and
 pick a winner.
 =============================================================================
-Reads the k_selection.csv each clustering script already writes (its top row,
-after sorting by the combined silhouette + Davies-Bouldin separation score,
-IS the method's chosen k and its metrics).
+Reads the k_selection.csv each clustering script already writes and takes the
+row marked chosen=True -- that method's own decision (Davies-Bouldin primary,
+silhouette secondary, non-crossing regions only, most clusters wins among
+survivors; see hierarchical_common.decide_k).
 
-IMPORTANT: that per-method "score" column is normalised against only that
-method's OWN 3-5 candidate k values, so it always tops out near 1.0 for
-whichever k that method itself preferred -- comparing those numbers directly
-across methods would be comparing different scales and would trivially
-favour whichever method ran last. Instead, this script re-normalises
-silhouette and Davies-Bouldin across the THREE METHODS' final results for
-each poster, then picks the winner from that shared scale.
+IMPORTANT: each method's own "score" column is normalised against only that
+method's OWN candidate k values, so it always tops out near 1.0 for whichever
+k that method itself preferred -- comparing those numbers directly across
+methods would be comparing different scales and would trivially favour
+whichever method ran last. Instead, this script re-normalises silhouette and
+Davies-Bouldin across the THREE METHODS' final (chosen) results for each
+poster, then picks the overall winner from that shared scale.
 
 DBSCAN's silhouette/Davies-Bouldin are also computed only on its non-noise
 points (the rest get folded in afterward by 1-NN), while Agglomerative/
@@ -73,12 +74,16 @@ def main():
             df = pd.read_csv(f)
             if df.empty:
                 continue
-            top = df.iloc[0]
+            chosen_rows = df[df["chosen"]] if "chosen" in df.columns else df.iloc[[0]]
+            if chosen_rows.empty:
+                chosen_rows = df.iloc[[0]]
+            top = chosen_rows.iloc[0]
             noise = float(top["noise_frac"]) if "noise_frac" in df.columns else 0.0
             per_method[method] = dict(
                 k=int(top["k"] if "k" in df.columns else top["n_clusters"]),
                 silhouette=float(top["silhouette"]),
                 davies_bouldin=float(top["davies_bouldin"]),
+                crosses=bool(top["crosses"]) if "crosses" in df.columns else False,
                 noise_pct=noise * 100,
                 noise_frac=noise,
             )
@@ -101,15 +106,17 @@ def main():
         winner = max(per_method, key=lambda m: per_method[m]["adj_score"])
         w = per_method[winner]
         others = [m for m in per_method if m != winner]
+        k_by_method = ", ".join(f"{m}={per_method[m]['k']}" for m in per_method)
         reason_bits = [f"highest separation score ({w['adj_score']:.3f}"
                        + (f" after a {w['noise_pct']:.0f}% noise discount" if w["noise_pct"] > 0.5 else "")
-                       + f"), silhouette {w['silhouette']:.3f}, Davies-Bouldin {w['davies_bouldin']:.3f}"]
+                       + f"), k={w['k']} regions, silhouette {w['silhouette']:.3f}, "
+                       f"Davies-Bouldin {w['davies_bouldin']:.3f}"]
         for m in others:
             o = per_method[m]
-            reason_bits.append(f"{m} scored {o['adj_score']:.3f} "
+            reason_bits.append(f"{m} scored {o['adj_score']:.3f} at k={o['k']} "
                                f"(silhouette {o['silhouette']:.3f}, DB {o['davies_bouldin']:.3f}"
                                + (f", {o['noise_pct']:.0f}% noise" if o["noise_pct"] > 0.5 else "") + ")")
-        reason = f"{winner} wins: " + "; ".join(reason_bits) + "."
+        reason = (f"{winner} wins: " + "; ".join(reason_bits) + f". k chosen per method: {k_by_method}.")
 
         row = dict(poster=poster, winner=winner, reason=reason)
         for m, vals in per_method.items():
@@ -133,6 +140,7 @@ def main():
             tbl.append(dict(method=m, k=int(r[f"{pfx}k"]), silhouette=round(r[f"{pfx}silhouette"], 3),
                             davies_bouldin=round(r[f"{pfx}davies_bouldin"], 3),
                             noise_pct=round(r[f"{pfx}noise_pct"], 1),
+                            crosses=bool(r.get(f"{pfx}crosses", False)),
                             separation_score=round(r[f"{pfx}adj_score"], 3)))
         md.append(pd.DataFrame(tbl).to_markdown(index=False))
         md.append("")

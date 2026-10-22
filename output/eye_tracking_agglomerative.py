@@ -48,6 +48,7 @@ from hierarchical_common import (
     POSTERS, K_RANGE, CROP_X0, CROP_Y0, REGION_COLORS,
     load_fixations, region_stats, duration_weighted_centers,
     plot_clusters, plot_average_gaze_path, filter_outliers, separation_score,
+    any_hulls_cross, decide_k,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -77,29 +78,37 @@ def cluster_poster_agglomerative(sub: pd.DataFrame):
         labels = fcluster(Z, t=k, criterion="maxclust")
         if len(set(labels)) < 2:
             continue
+        sub_k = sub.copy(); sub_k["region"] = labels
         rows.append(dict(k=k, silhouette=silhouette_score(X, labels),
                          davies_bouldin=davies_bouldin_score(X, labels),
-                         calinski_harabasz=calinski_harabasz_score(X, labels)))
+                         calinski_harabasz=calinski_harabasz_score(X, labels),
+                         crosses=any_hulls_cross(sub_k, sorted(set(labels)))))
     k_selection = pd.DataFrame(rows)
     if k_selection.empty:
         raise RuntimeError("no viable k found for agglomerative clustering")
-    # choose k by combined silhouette + Davies-Bouldin separation, not
-    # silhouette alone, so a k that only looks good by carving off one tight
-    # little cluster doesn't beat a k with genuinely well-separated regions
+    # legacy combined score, kept for reference/comparison in the output table
     k_selection["score"] = separation_score(k_selection["silhouette"].to_numpy(),
                                             k_selection["davies_bouldin"].to_numpy())
-    k_selection = k_selection.sort_values("score", ascending=False).reset_index(drop=True)
 
-    chosen_k = int(k_selection.iloc[0]["k"])
+    # the actual decision: Davies-Bouldin primary, silhouette secondary check,
+    # crossing regions disqualified, most clusters wins among what survives
+    # (see hierarchical_common.decide_k for the exact rule)
+    decision = decide_k(k_selection)
+    chosen_k = int(decision["k"])
+    k_selection = k_selection.sort_values("k").reset_index(drop=True)
+    k_selection["chosen"] = k_selection["k"] == chosen_k
+
     labels = fcluster(Z, t=chosen_k, criterion="maxclust")   # 1..chosen_k
     sub["region"] = labels
 
     region_ids = sorted(set(labels))
     centers = duration_weighted_centers(sub, region_ids)
 
-    info = dict(k=chosen_k, silhouette=float(k_selection.iloc[0]["silhouette"]),
-               davies_bouldin=float(k_selection.iloc[0]["davies_bouldin"]),
-               score=float(k_selection.iloc[0]["score"]), n_dropped=n_dropped,
+    info = dict(k=chosen_k, silhouette=float(decision["silhouette"]),
+               davies_bouldin=float(decision["davies_bouldin"]),
+               score=float(decision["score"]), n_dropped=n_dropped,
+               crosses=bool(decision["crosses"]),
+               used_crossing_fallback=bool(decision["used_crossing_fallback"]),
                region_ids=region_ids, centers=centers, k_selection=k_selection, Z=Z)
     return sub, info
 
@@ -164,10 +173,11 @@ def main():
         if info["n_dropped"]:
             print(f"  dropped {info['n_dropped']} stray/isolated fixations before clustering "
                   f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)")
-        print("  Stage A -- separation score (silhouette + Davies-Bouldin) by k (Ward-linkage cut):")
+        print("  Stage A -- candidates by k (Ward-linkage cut), 'crosses' = overlapping region hulls:")
         print(info["k_selection"].to_string(index=False))
-        print(f"  Stage B -- cut at k={info['k']}  silhouette={info['silhouette']:.4f}  "
-              f"Davies-Bouldin={info['davies_bouldin']:.4f}")
+        print(f"  Decision: k={info['k']} (DB primary, silhouette secondary, non-crossing, most clusters) "
+              f"silhouette={info['silhouette']:.4f}  Davies-Bouldin={info['davies_bouldin']:.4f}"
+              + ("  [all candidates crossed -- used anyway]" if info["used_crossing_fallback"] else ""))
 
         stats, order = region_stats(sub, info["centers"], info["region_ids"])
         stats.to_csv(pdir / "region_stats.csv", index=False)
@@ -192,10 +202,11 @@ def main():
             (f"- Dropped {info['n_dropped']} stray/isolated fixations before clustering "
              f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)" if info["n_dropped"] else
              "- No fixations dropped as outliers"),
-            f"- k selection (silhouette + Davies-Bouldin separation score by k):", "",
+            f"- k candidates (DB primary, silhouette secondary, non-crossing, most-clusters-wins):", "",
             info["k_selection"].to_markdown(index=False), "",
             f"- Chosen k={info['k']}, silhouette={info['silhouette']:.3f}, "
-            f"Davies-Bouldin={info['davies_bouldin']:.3f}",
+            f"Davies-Bouldin={info['davies_bouldin']:.3f}"
+            + ("  _(all candidates crossed -- used anyway)_" if info["used_crossing_fallback"] else ""),
             f"- Aggregate viewing order: {' -> '.join('R' + str(n) for n in order_nums)}", "",
             stats.to_markdown(index=False), "",
         ]

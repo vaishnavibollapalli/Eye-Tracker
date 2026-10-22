@@ -20,8 +20,10 @@ import matplotlib.patheffects as pe
 from matplotlib.patches import Polygon as MplPolygon
 from PIL import Image
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hierarchical_common import any_hulls_cross, decide_k
 
-HERE = Path(__file__).resolve().parent            
+HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parent
 BASE_DIR = PROJECT / "Renamed Signals"            
 POSTER_IMG_DIR = PROJECT / "posters"
@@ -60,9 +62,11 @@ OFFSET_Y, SCALE_Y = 68, 1208 / 1200
 # DBSCAN grid search (mirrors eye_tracking_dbscan.R)
 MIN_SAMPLES_GRID = [8, 10, 12, 15, 18, 20, 25, 30]
 EPS_GRID = [18, 20, 22, 25, 28, 30, 35, 40, 45, 50, 55, 60, 70, 80]
-# narrowed from (3,7): fewer/larger regions read as more distinct and are
-# less prone to the adjacent-region bleed you get when k pushes toward 7
-K_RANGE = (3, 5)
+# widened: more, smaller regions are preferred as long as they stay spatially
+# distinct -- decide_k (hierarchical_common) enforces that via a hull-crossing
+# check, so the k-range itself no longer needs to be capped low to get
+# separable regions.
+K_RANGE = (3, 8)
 NOISE_RANGE = (0.02, 0.25)
 
 # pre-clustering outlier filter: a fixation whose distance to its OUTLIER_K-th
@@ -276,33 +280,51 @@ def cluster_poster_regions_dbscan(sub: pd.DataFrame):
 
     ok_df["score"] = separation_score(ok_df["silhouette"].to_numpy(), ok_df["davies_bouldin"].to_numpy())
 
-    # best combined score achievable at each k -> the k selection table
+    # best combined score achievable at each k -> one representative
+    # (eps, min_samples) per k, exactly as before
     k_selection = (ok_df.loc[ok_df.groupby("n_clusters")["score"].idxmax()]
-                        .sort_values("score", ascending=False)
+                        .sort_values("n_clusters")
                         .reset_index(drop=True))
-    best_k_row = k_selection.iloc[0]
-    chosen_k = int(best_k_row["n_clusters"])
+
+    # for each candidate k, actually fold noise the way Stage B would and
+    # check whether the resulting regions' hulls spatially cross -- this
+    # needs the real post-fold assignment, not just the raw DBSCAN labels
+    def fold_and_label(eps, ms):
+        labels = DBSCAN(eps=eps, min_samples=ms).fit_predict(X)
+        noise_mask = labels == -1
+        filled = labels.copy()
+        if noise_mask.any() and (~noise_mask).any():
+            knn = KNeighborsClassifier(n_neighbors=1).fit(X[~noise_mask], labels[~noise_mask])
+            filled[noise_mask] = knn.predict(X[noise_mask])
+        return labels, filled
+
+    crosses_col = []
+    for _, row in k_selection.iterrows():
+        _, filled = fold_and_label(int(row["eps"]), int(row["min_samples"]))
+        sub_k = sub.copy(); sub_k["region"] = filled
+        crosses_col.append(any_hulls_cross(sub_k, sorted(set(filled))))
+    k_selection["crosses"] = crosses_col
+    k_selection["k"] = k_selection["n_clusters"]   # decide_k expects a "k" column
+
+    # the actual decision: Davies-Bouldin primary, silhouette secondary check,
+    # crossing regions disqualified, most clusters wins among what survives
+    decision = decide_k(k_selection)
+    chosen_k = int(decision["k"])
+    k_selection["chosen"] = k_selection["k"] == chosen_k
 
     # ---- STAGE B: DBSCAN clustering, fixed to the (eps, min_samples) that
-    # produced the chosen k with the best combined separation score
-    ms, eps = int(best_k_row["min_samples"]), int(best_k_row["eps"])
-    labels = DBSCAN(eps=eps, min_samples=ms).fit_predict(X)
-    best = dict(min_samples=ms, eps=eps, labels=labels,
-                silhouette=float(best_k_row["silhouette"]),
-                davies_bouldin=float(best_k_row["davies_bouldin"]),
-                score=float(best_k_row["score"]),
-                n_clusters=chosen_k, noise_frac=float(best_k_row["noise_frac"]))
+    # produced the chosen k
+    ms, eps = int(decision["min_samples"]), int(decision["eps"])
+    raw_labels, labels_filled = fold_and_label(eps, ms)
+    best = dict(min_samples=ms, eps=eps,
+                silhouette=float(decision["silhouette"]),
+                davies_bouldin=float(decision["davies_bouldin"]),
+                score=float(decision["score"]),
+                n_clusters=chosen_k, noise_frac=float(decision["noise_frac"]))
 
-    labels = best["labels"]
-    sub["region_raw"] = labels                     # -1 = noise, kept for reporting
-
-    # fold noise into nearest labelled region (1-NN)
-    noise_mask = labels == -1
-    labels_filled = labels.copy()
-    if noise_mask.any() and (~noise_mask).any():
-        knn = KNeighborsClassifier(n_neighbors=1).fit(X[~noise_mask], labels[~noise_mask])
-        labels_filled[noise_mask] = knn.predict(X[noise_mask])
+    sub["region_raw"] = raw_labels                  # -1 = noise, kept for reporting
     sub["region"] = labels_filled
+    w = sub["duration"].to_numpy()
 
     # duration-weighted centroid per final region
     region_ids = sorted(set(labels_filled))
@@ -316,6 +338,8 @@ def cluster_poster_regions_dbscan(sub: pd.DataFrame):
                k=best["n_clusters"], silhouette=best["silhouette"],
                davies_bouldin=best["davies_bouldin"], score=best["score"],
                noise_frac=best["noise_frac"], relaxed=relaxed, n_dropped=n_dropped,
+               crosses=bool(decision["crosses"]),
+               used_crossing_fallback=bool(decision["used_crossing_fallback"]),
                region_ids=region_ids, centers=centers, tried=tried_df,
                k_selection=k_selection)
     return sub, info
@@ -497,16 +521,17 @@ def main():
         if info["n_dropped"]:
             print(f"  dropped {info['n_dropped']} stray/isolated fixations before clustering "
                   f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)")
-        print("  Stage A -- best separation score (silhouette + Davies-Bouldin) at each k:")
+        print("  Stage A -- candidates by k, 'crosses' = overlapping region hulls:")
         print(info["k_selection"][["n_clusters", "min_samples", "eps", "silhouette",
-                                   "davies_bouldin", "calinski_harabasz", "noise_frac", "score"]]
+                                   "davies_bouldin", "calinski_harabasz", "noise_frac",
+                                   "crosses", "chosen"]]
               .to_string(index=False))
-        print(f"  -> k={info['k']} chosen (highest combined separation score across k)")
-        print(f"  Stage B -- DBSCAN clustering at k={info['k']}: "
+        print(f"  Decision: k={info['k']} (DB primary, silhouette secondary, non-crossing, most clusters) "
               f"eps={info['eps']}  min_samples={info['min_samples']}  "
               f"noise={info['noise_frac']*100:.1f}%  silhouette={info['silhouette']:.4f}  "
               f"Davies-Bouldin={info['davies_bouldin']:.4f}"
-              + ("  [relaxed grid]" if info["relaxed"] else ""))
+              + ("  [relaxed grid]" if info["relaxed"] else "")
+              + ("  [all candidates crossed -- used anyway]" if info["used_crossing_fallback"] else ""))
 
         stats, order = region_stats(sub, info)
         stats.to_csv(pdir / "region_stats.csv", index=False)
@@ -529,16 +554,18 @@ def main():
             (f"- Dropped {info['n_dropped']} stray/isolated fixations before clustering "
              f"({info['n_dropped'] / len(sub_all) * 100:.1f}%)" if info["n_dropped"] else
              "- No fixations dropped as outliers"),
-            f"- Number of regions (k) chosen by best combined separation score "
-            f"(silhouette + Davies-Bouldin) across k={K_RANGE[0]}..{K_RANGE[1]}:",
+            f"- Number of regions (k) across k={K_RANGE[0]}..{K_RANGE[1]}, decided by: "
+            f"Davies-Bouldin primary, silhouette secondary check, crossing regions "
+            f"disqualified, most clusters wins among what survives:",
             "",
             info["k_selection"][["n_clusters", "silhouette", "davies_bouldin", "calinski_harabasz",
-                                 "eps", "min_samples", "noise_frac", "score"]]
+                                 "eps", "min_samples", "noise_frac", "crosses", "chosen"]]
                 .rename(columns={"n_clusters": "k"}).to_markdown(index=False),
             "",
             f"- Chosen k={info['k']}  ->  DBSCAN eps={info['eps']}px, min_samples={info['min_samples']}, "
             f"silhouette={info['silhouette']:.3f}, Davies-Bouldin={info['davies_bouldin']:.3f}"
-            + ("  _(relaxed grid)_" if info["relaxed"] else ""),
+            + ("  _(relaxed grid)_" if info["relaxed"] else "")
+            + ("  _(all candidates crossed -- used anyway)_" if info["used_crossing_fallback"] else ""),
             f"- {info['noise_frac']*100:.1f}% of fixations were noise (folded into nearest region)",
             f"- Aggregate viewing order: {' -> '.join('R' + str(n) for n in order_nums)}",
             "",
