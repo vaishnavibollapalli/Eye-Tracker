@@ -71,7 +71,7 @@ def cluster_hierarchical_auto(poster_df, poster_name, linkage_method, img_w, img
     Z = linkage(X, method=linkage_method, metric="euclidean")
 
     scores = []
-    for k in range(2, 11):
+    for k in range(6, 15):
         labels = fcluster(Z, t=k, criterion="maxclust")
         if len(set(labels)) < 2: continue
         m = _all_metrics(X, labels)
@@ -88,7 +88,7 @@ def cluster_hierarchical_auto(poster_df, poster_name, linkage_method, img_w, img
     
     # TOLERANCE-BASED SELECTION: pick largest k within 0.05 of the peak; im picking .4
     max_score = df["score"].max()
-    tolerance = 0.1
+    tolerance = 0.15
     candidates = df[df["score"] >= (max_score - tolerance)]
     best_row = candidates.loc[candidates["k"].idxmax()]
     best_k = int(best_row["k"])
