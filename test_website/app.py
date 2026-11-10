@@ -1,14 +1,16 @@
 """
-Poster Cluster Explorer -- a small local website.
+Poster Gaze Explorer -- a small local website.
 
 Pick a poster, cluster it with hierarchical clustering or DBSCAN, change the
 parameters and compare the results, then look at the chosen clustering as a
-heatmap and as a real-time replay of one participant's gaze.
+heatmap and as a real-time replay of one participant's or the whole group's
+gaze, and compare all posters side by side.
 
 Clustering is python/clustering.py, the same code demo.py and
 make_cluster_animations.py use, so results here match theirs.
 
-Usage (from the repository root):
+Usage (from the repository root), or double-click test_website/start_website.bat:
+    python test_website/app.py --open           start and open the browser
     python test_website/app.py                  then open http://127.0.0.1:5000
     python test_website/app.py --rebuild-cache  re-read Renamed Signals/
 
@@ -21,10 +23,14 @@ import argparse
 import contextlib
 import io
 import json
+import logging
 import math
 import pickle
 import re
+import socket
 import sys
+import threading
+import webbrowser
 from pathlib import Path
 
 import numpy as np
@@ -133,20 +139,31 @@ def column(a, digits=1):
 
 CONTENT_FILE = HERE / "poster_content.json"
 TYPES = ("text", "image", "shape", "background")
-_content = {"mtime": None, "posters": {}}
+_content = {"mtime": None, "posters": {}, "titles": {}}
 
 
-def poster_elements(slug) -> list[dict]:
-    """The poster's content elements with boxes in image pixels. The file is
-    read again whenever it changes, so edits apply without a restart."""
+def load_content():
+    """Read poster_content.json again whenever it changes, so edits apply
+    without a restart."""
     mtime = CONTENT_FILE.stat().st_mtime if CONTENT_FILE.exists() else None
     if mtime != _content["mtime"]:
         raw = {}
         if mtime is not None:
             with open(CONTENT_FILE, encoding="utf-8") as fh:
-                raw = json.load(fh).get("posters", {})
-        _content.update(mtime=mtime, posters=raw)
+                raw = json.load(fh)
+        _content.update(mtime=mtime, posters=raw.get("posters", {}), titles=raw.get("titles", {}))
         RESULTS.clear()   # cached results carry the old descriptions
+
+
+def title(slug) -> str:
+    """The poster's display name (from poster_content.json, else its stimulus name)."""
+    load_content()
+    return _content["titles"].get(slug) or POSTERS[slug]["stim"]
+
+
+def poster_elements(slug) -> list[dict]:
+    """The poster's content elements with boxes in image pixels."""
+    load_content()
     x0, y0, x1, y1 = POSTERS[slug]["bounds"]
     bw, bh = x1 - x0 + 1, y1 - y0 + 1
     out = []
@@ -236,7 +253,7 @@ def index():
 @app.get("/api/posters")
 def posters():
     return jsonify([{
-        "id": slug, "name": p["stim"], "width": p["width"], "height": p["height"],
+        "id": slug, "name": title(slug), "stimulus": p["stim"], "width": p["width"], "height": p["height"],
         "bounds": p["bounds"], "defaults": p["defaults"],
         "n_participants": len(p["gaze"]), "n_fixations": len(p["fix"]),
     } for slug, p in POSTERS.items()])
@@ -285,9 +302,18 @@ def default_params(slug, method) -> dict:
 RESULTS: dict[str, dict] = {}   # cache: settings -> result
 
 
+COMPUTE_LOCK = threading.Lock()   # one clustering at a time (requests and the warm-up thread)
+
+
 def compute(params: dict) -> dict:
     """Cluster one poster and describe the result. Raises NoClusters."""
+    with COMPUTE_LOCK:
+        return _compute(params)
+
+
+def _compute(params: dict) -> dict:
     key = json.dumps(params, sort_keys=True)
+    load_content()   # may clear RESULTS if the content file changed
     if key in RESULTS:
         return RESULTS[key]
 
@@ -410,7 +436,7 @@ def compare():
                 params = parse_params({**overrides[slug], "poster": slug})
             except HTTPException:
                 pass   # a bad override falls back to the default
-        row = {"id": slug, "name": poster["stim"], "picked": params != default}
+        row = {"id": slug, "name": title(slug), "picked": params != default}
         try:
             res = compute(params)
         except NoClusters as e:
@@ -444,26 +470,51 @@ def gaze(slug, pid):
                     "t": column(t), "x": column(x), "y": column(y)})
 
 
-@app.get("/api/participants/<slug>")
-def participants(slug):
-    poster = get_poster(slug)
-    out = []
-    for pid, (_, x, _, _) in poster["gaze"].items():
-        out.append({"pid": pid, "valid": num(np.isfinite(x).mean(), 3)})
-    out.sort(key=lambda r: int(r["pid"][1:]))
-    return jsonify(out)
+def port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def warm_up():
+    """Cluster every poster with the default settings in the background, so
+    the compare page opens instantly."""
+    for slug in list(POSTERS):
+        try:
+            compute(default_params(slug, "hierarchical"))
+        except NoClusters:
+            pass
+    print("Comparison of all posters is ready.")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Poster Cluster Explorer")
+    ap = argparse.ArgumentParser(description="Poster Gaze Explorer")
     ap.add_argument("--port", type=int, default=5000)
+    ap.add_argument("--open", action="store_true", help="open the website in the browser")
     ap.add_argument("--rebuild-cache", action="store_true",
                     help="re-read Renamed Signals/ instead of using the cache")
     args = ap.parse_args()
+    url = f"http://127.0.0.1:{args.port}"
+
+    # Windows lets two servers listen on one port, and the older one keeps
+    # answering, so refuse to start a second copy.
+    if port_in_use(args.port):
+        print(f"Something is already running at {url} -- probably the website from an earlier start.")
+        print("Use that one, or close its window / press Ctrl+C in it first. "
+              f"To run a second copy, add --port {args.port + 1}.")
+        if args.open:
+            webbrowser.open(url)
+        sys.exit(1)
 
     POSTERS.update(load_data(args.rebuild_cache))
     print(f"{len(POSTERS)} posters ready.")
-    print(f"Open http://127.0.0.1:{args.port} in your browser (Ctrl+C to stop).")
+    threading.Thread(target=warm_up, daemon=True).start()
+    print(f"Open {url} in your browser. Press Ctrl+C to stop.")
+    # keep the console quiet while presenting: no per-request lines and no
+    # "development server" banner (it only ever serves this computer)
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+    if args.open:
+        threading.Timer(1.0, webbrowser.open, args=(url,)).start()
     app.run(host="127.0.0.1", port=args.port, debug=False)
 
 

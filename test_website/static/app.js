@@ -293,8 +293,7 @@ function renderRegions() {
   $("#regions tbody").innerHTML = !res ? "" : res.regions.map((r) => `
     <tr><td><i class="swatch" style="background:${r.color}"></i>R${r.num}</td>
       <td class="content-cell">${contentHTML(r.content)}</td>
-      <td>${fmt(r.pct_gaze, 1)}%</td><td>${fmt(r.pct_first_fix, 0)}%</td>
-      <td>${r.n_participants}</td></tr>`).join("");
+      <td>${fmt(r.pct_gaze, 1)}%</td><td>${fmt(r.pct_first_fix, 0)}%</td></tr>`).join("");
 }
 
 function renderScores() {
@@ -620,9 +619,8 @@ function renderViewerSummary() {
   const res = entry.result;
 
   if (r.mode === "avg") {
-    $("#replay-hint").textContent = "The heatmap builds up as the group's fixations add up over time (like "
-      + "average_gaze_animation.gif). Each region gets its number in the group's order once the group has, "
-      + "on average, reached it.";
+    $("#replay-hint").textContent = "The heatmap builds up as everyone's fixations add up over time. Each region "
+      + "gets its number in the group's order once the group has, on average, reached it.";
     const most = res.regions[0];
     const first = res.regions.reduce((a, b) => (b.pct_first_fix > a.pct_first_fix ? b : a));
     const people = new Set(res.fixations.pid).size;
@@ -635,8 +633,7 @@ function renderViewerSummary() {
           <span class="what">${contentHTML(first.content)}</span></div>
       </div>
       <h4>Regions in the order the group reached them</h4>
-      <p class="hint">Ordered by the average time of each person's first look at the region (the visit order used in
-        eye_tracking_analysis.R).</p>
+      <p class="hint">Ordered by the average time of each person's first look at the region.</p>
       <ol class="order-list" id="group-order">${res.group_order.map((n) => {
         const g = res.byNum[n];
         return `<li data-t="${g.avg_entry_ms}">${rchip(g)}<span>${contentHTML(g.content, false)}</span>
@@ -819,6 +816,7 @@ function showCompare(on) {
   $("#explorer").hidden = on;
   $(".poster-pick").hidden = on;
   $("#poster-meta").hidden = on;
+  $("#present-toggle").hidden = on;
   $("#compare-toggle").textContent = on ? "← Back to explorer" : "Compare all posters";
   if (on) { pause(); loadCompare(); } else layout();
 }
@@ -846,8 +844,8 @@ async function loadCompare() {
     renderCompare(rows);
     const picked = rows.filter((r) => r.picked).map((r) => r.name);
     status.textContent = picked.length
-      ? `Using the run you picked for ${picked.join(", ")}; the other posters use demo.py's settings.`
-      : "All posters use demo.py's settings. Pick a different run for a poster in the explorer to use it here.";
+      ? `Using your own settings for ${picked.join(", ")}; the other posters use the default settings.`
+      : "All posters use the default clustering settings.";
   } catch (e) {
     if (token === compareToken) { status.textContent = e.message; status.classList.add("error"); }
   }
@@ -885,7 +883,7 @@ function renderCompare(rows) {
     const m = {};
     for (const r of ok) (m[r[key].content.type] ||= []).push(r.name);
     return TYPE_ORDER.filter((t) => m[t]).sort((a, b) => m[b].length - m[a].length)
-      .map((t) => `<b>${TYPE_NAMES[t].toLowerCase()}</b> on ${m[t].length} (${m[t].map(esc).join(", ")})`).join("; ");
+      .map((t) => `<b>${TYPE_NAMES[t].toLowerCase()}</b> on ${m[t].length} (${m[t].map(esc).join(" · ")})`).join("; ");
   };
   const mean = (t) => ok.reduce((s, r) => s + (r.type_share[t] || 0), 0) / ok.length;
   const top = (t) => ok.reduce((a, b) => ((b.type_share[t] || 0) > (a.type_share[t] || 0) ? b : a));
@@ -957,12 +955,35 @@ function bind() {
     state.replay.now = +e.target.value;
     draw(); updateClock();
   });
+  // shortcuts for presenting: ← → poster, 1 2 3 view, Space play, P present, C compare
   document.addEventListener("keydown", (e) => {
-    if (e.code === "Space" && state.view === "replay" && !/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName)) {
+    if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === "c") { showCompare(state.page !== "compare"); return; }
+    if (k === "p") { togglePresent(); return; }
+    if (state.page === "compare") return;
+    if (e.code === "Space" && state.view === "replay") {
       e.preventDefault();
       state.replay.playing ? pause() : play();
+    } else if (k === "arrowleft" || k === "arrowright") {
+      e.preventDefault();
+      const i = state.posters.findIndex((p) => p.id === state.poster.id);
+      const next = state.posters[(i + (k === "arrowright" ? 1 : state.posters.length - 1)) % state.posters.length];
+      $("#poster").value = next.id;
+      selectPoster(next.id);
+    } else if (["1", "2", "3"].includes(k)) {
+      $$("#view button")[+k - 1].click();
     }
   });
+
+  $("#present-toggle").addEventListener("click", togglePresent);
+  $("#theme-toggle").addEventListener("click", () => {
+    const next = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("pce-theme", next); } catch { /* storage unavailable */ }
+    showThemeIcon();
+  });
+  showThemeIcon();
 
   window.addEventListener("resize", debounce(layout, 150));
 
@@ -978,6 +999,25 @@ function bind() {
   });
 }
 
+function currentTheme() {
+  const t = document.documentElement.dataset.theme;
+  if (t) return t;
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+function showThemeIcon() {
+  const dark = currentTheme() === "dark";
+  const b = $("#theme-toggle");
+  b.textContent = dark ? "☀" : "☾";
+  b.title = dark ? "Switch to light theme" : "Switch to dark theme";
+}
+
+function togglePresent() {
+  const on = document.body.classList.toggle("present");
+  $("#present-toggle").classList.toggle("on", on);
+  $("#present-toggle").textContent = on ? "Exit present" : "Present";
+  layout();
+}
+
 async function init() {
   bind();
   updateOutputs();
@@ -988,6 +1028,8 @@ async function init() {
     showMsg(`Could not reach the server (${e.message}). Start it with: python test_website/app.py`);
     return;
   }
+  const people = Math.max(...state.posters.map((p) => p.n_participants));
+  $("#study-meta").textContent = `Eye-tracking study · ${state.posters.length} posters · ${people} participants`;
   const sel = $("#poster");
   sel.innerHTML = state.posters.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
   let saved = null;
@@ -1001,6 +1043,7 @@ async function init() {
   if (hash.has("t")) state.replay.startAt = +hash.get("t") * 1000;
   if (hash.get("who")) state.replay.wantPid = hash.get("who") === "average" ? AVG : hash.get("who");
   if (hash.get("page") === "compare") showCompare(true);
+  if (hash.get("present") === "1") togglePresent();
   await selectPoster(sel.value);
 }
 

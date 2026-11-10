@@ -4,8 +4,26 @@
     "Each element has a type (text, image, shape or background), a short label and one or more boxes.",
     "A box is [left, top, right, bottom] in percent of the visible poster (the poster without its letterbox bars), so 0 is the left/top edge and 100 the right/bottom edge.",
     "Where boxes overlap, a fixation belongs to the smallest box that contains it (for example text printed on a shape counts as the text).",
-    "Fixations outside every box count as background. Edit freely: the website reads this file again whenever it changes."
+    "Fixations outside every box count as background. Edit freely: the website reads this file again whenever it changes.",
+    "'titles' are the poster names the website shows."
   ],
+  "titles": {
+    "armin_hofman_1955": "Armin Hofman, 1955",
+    "barry_ceck_1988": "Barry Ceck, 1988",
+    "bookcover": "Book cover: Frankenstein in Baghdad",
+    "david_carson_1990": "David Carson, 1990",
+    "david_carson": "David Carson",
+    "ella_rosenblatt_2021": "Ella Rosenblatt, 2021",
+    "iris_chung_2015": "Iris Chung, 2015",
+    "jan_tschichold_1927_die_frau_ohne_namen": "Jan Tschichold, 1927: Die Frau ohne Namen",
+    "jan_tschichold_1938_der": "Jan Tschichold, 1938: Der Berufsphotograph",
+    "joost_schmidt_1923_saatliches": "Joost Schmidt, 1923: Staatliches Bauhaus",
+    "nancy_poster": "Nancy: AIGA Boston",
+    "paul_rand_1947": "Paul Rand, 1947",
+    "paula_scher_1995": "Paula Scher, 1995",
+    "scott_barry_2010": "Scott Barry, 2010",
+    "sean_alatorre": "Sean Alatorre"
+  },
   "posters": {
     "armin_hofman_1955": [
       {"type": "text", "label": "Title: 'Theater Bau von der Antike'", "boxes": [[50, 0, 97, 24]]},

@@ -38,6 +38,25 @@
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #111318;
+  --surface: #1a1d24;
+  --surface-2: #232731;
+  --text: #e6e8ec;
+  --muted: #98a2b3;
+  --border: #2e3340;
+  --accent: #5b8def;
+  --accent-text: #ffffff;
+  --best: #14361f;
+  --best-text: #86efac;
+  --danger: #f97066;
+  --stage: #0b0d11;
+  --t-text: #6b9cff;
+  --t-image: #f08a4b;
+  --t-shape: #4cc483;
+  --t-background: #8a94a6;
+  color-scheme: dark;
+}
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -59,8 +78,33 @@ h3 { font-size: 14px; margin: 0 0 4px; }
   padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 5;
 }
+.brand { display: flex; flex-direction: column; line-height: 1.2; margin-right: 8px; }
+.brand span { font-size: 12px; }
 .poster-pick { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-.poster-pick select { min-width: 280px; font-size: 14px; }
+.poster-pick select { min-width: 320px; font-size: 15px; font-weight: 600; padding: 6px 10px; }
+.top-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+button.primary-outline {
+  border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text);
+}
+button.ghost.icon { width: 38px; padding: 7px 0; text-align: center; }
+button.ghost.on { background: var(--accent); color: var(--accent-text); }
+
+/* shortcut hint under the poster */
+.stage-col { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.keys { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }
+kbd {
+  display: inline-block; min-width: 20px; padding: 0 5px; margin: 0 1px; border-radius: 4px;
+  border: 1px solid var(--border); border-bottom-width: 2px; background: var(--surface);
+  font: 600 11px/18px system-ui, sans-serif; color: var(--text); text-align: center;
+}
+
+/* present mode: no settings sidebar, poster as large as possible */
+body.present .sidebar { display: none; }
+body.present .layout { grid-template-columns: minmax(0, 1fr); }
+body.present .stage-wrap { grid-template-columns: minmax(0, 1fr) 400px; }
+body.present .keys { display: none; }
+@media (max-width: 1250px) { body.present .stage-wrap { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- layout ---------- */
 .layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; padding: 16px; }
