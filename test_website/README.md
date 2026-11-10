@@ -39,6 +39,28 @@ seconds. If the recordings change, run `python test_website/app.py --rebuild-cac
    - **Gaze replay**: one participant's recorded gaze in real time. The dot
      takes the colour of the cluster being fixated and turns white during
      saccades. ★ marks the participant whose viewing best matches the group's.
+     Beside it: the region they looked at first, the one they looked at
+     longest, the regions in the order they first saw them, and their full
+     path, each with what the region contains.
+   - **Gaze replay → All participants (average)**: the group's fixation
+     heatmap building up over time, with the regions numbered in the order the
+     group reached them (average time of each person's first look, as in
+     `output/eye_tracking_analysis.R`) and what each contains.
+5. **Compare all posters** (top right): for every poster, the most-viewed
+   region, the region looked at first, the group's order, and the split of
+   fixation time between text, images, shapes and background, with a written
+   summary across posters. It uses demo.py's settings, or the run you picked in
+   the explorer for a poster.
+
+## What a region contains
+
+`poster_content.json` lists what is where on each poster: text, images and
+shapes, each with a short label and boxes in percent of the poster. A region's
+content is the element its fixation time falls on most (where boxes overlap,
+the smallest box wins, so text printed on a shape counts as text; anything
+outside every box is background). The boxes were drawn by hand from the poster
+images, so adjust them if a label looks wrong; the site picks up edits without
+a restart.
 
 A link can open a view directly, for example
 `http://127.0.0.1:5000/#poster=nancy_poster&view=replay&t=6`.

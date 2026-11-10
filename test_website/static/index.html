@@ -14,9 +14,42 @@
       <select id="poster"></select>
     </label>
     <span id="poster-meta" class="muted"></span>
+    <button id="compare-toggle" class="ghost push-right">Compare all posters</button>
   </header>
 
-  <div class="layout">
+  <!-- ======================= compare page ======================= -->
+  <section id="compare" class="compare" hidden>
+    <div class="card compare-head">
+      <div>
+        <h2>Compare all posters</h2>
+        <p class="hint">For each poster: the region people looked at most, the region they looked at first, the order the group
+          reached the regions, and how fixation time splits between text, images and shapes. What a region contains comes from
+          <code>test_website/poster_content.json</code>.</p>
+      </div>
+      <div class="compare-controls">
+        <label class="row"><span>Clustering</span>
+          <select id="cmp-method">
+            <option value="hierarchical">Hierarchical (demo.py settings)</option>
+            <option value="dbscan">DBSCAN (demo.py settings)</option>
+          </select></label>
+        <label class="check"><input type="checkbox" id="cmp-picked" checked> Use the run I picked in the explorer, where I picked one</label>
+      </div>
+    </div>
+    <div id="cmp-status" class="status"></div>
+    <div id="cmp-summary" class="card" hidden></div>
+    <div class="card">
+      <div class="legend-types" id="cmp-legend"></div>
+      <div class="table-wrap tall">
+        <table id="cmp-table" class="cmp-table">
+          <thead><tr><th>Poster</th><th>Most viewed region</th><th>Looked at first</th>
+            <th>Order the group reached the regions</th><th>Fixation time by content type</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="layout" id="explorer">
     <!-- ======================= controls ======================= -->
     <aside class="sidebar">
       <section class="card">
@@ -117,9 +150,9 @@
                 <label class="check"><input type="checkbox" id="show-labels" checked> Labels</label>
               </div>
               <table class="regions" id="regions">
-                <thead><tr><th>Region</th><th title="share of total fixation time">% gaze</th>
+                <thead><tr><th>Region</th><th>Contains</th><th title="share of total fixation time">% gaze</th>
                   <th title="share of participants whose first fixation landed here">% first look</th>
-                  <th>Fixations</th><th>People</th></tr></thead>
+                  <th title="participants who looked here">People</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -166,9 +199,9 @@
                   </select></label>
               </div>
               <label class="check"><input type="checkbox" id="replay-loop" checked> Loop</label>
-              <p class="hint">The dot takes the colour of the cluster being fixated and turns white during saccades.
-                ★ marks the participant whose viewing best matches the group's for this clustering.</p>
+              <p class="hint" id="replay-hint"></p>
             </div>
+            <div class="card" id="viewer-summary"></div>
           </div>
         </div>
       </div>

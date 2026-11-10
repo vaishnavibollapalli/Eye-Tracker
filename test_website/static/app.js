@@ -20,10 +20,15 @@ const HEAT_STOPS = [      // position, rgb, alpha
   [1.00, [230, 20, 20], 0.95],
 ];
 
+const AVG = "__avg";       // replay option: all participants
+const TYPE_NAMES = { text: "Text", image: "Image", shape: "Shape", background: "Background" };
+const TYPE_ORDER = ["text", "image", "shape", "background"];
+
 const state = {
   posters: [], poster: null, img: null, base: null, scale: 1, dpr: 1,
   method: "hierarchical", kMode: "auto", view: "clusters",
   history: [], current: null, nextId: 1, runToken: 0, quiet: false,
+  picked: {},              // poster id -> settings of the run last shown (used by the compare page)
   heat: { key: null, canvas: null },
   replay: { pid: null, gaze: null, sampleRegion: null, now: 0, playing: false, last: null },
   gazeCache: new Map(),
@@ -35,6 +40,26 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const fmt = (v, d) => (v == null ? "–" : Number(v).toFixed(d));
 const px = (n) => n / state.scale;   // screen pixels -> image pixels
 const pidNum = (pid) => parseInt(pid.slice(1), 10);
+
+const typeBadge = (t) => `<span class="type ${t}">${TYPE_NAMES[t] || t}</span>`;
+const pct = (v) => `${Math.round(v * 100)}%`;
+const secs = (ms) => `${(ms / 1000).toFixed(1)} s`;
+
+/* "Text 'Title …'" plus, when the region is mixed, what else it covers */
+function contentHTML(c, withAlso = true) {
+  if (!c) return "–";
+  let html = `${typeBadge(c.type)}${esc(c.label)}`;
+  if (withAlso && c.share != null && c.share < 0.75) {
+    const others = c.parts.slice(1).filter((p) => p.share >= 0.1)
+      .map((p) => `${esc(p.label)} ${pct(p.share)}`);
+    html += ` <span class="muted">${pct(c.share)}</span>`;
+    if (others.length) html += `<span class="also">also: ${others.join(", ")}</span>`;
+  }
+  return html;
+}
+const rchip = (r, extra = "") => (r
+  ? `<span class="rchip" style="background:${r.color}">R${r.num}${extra ? ` <small>${extra}</small>` : ""}</span>`
+  : `<span class="rchip" style="background:#888">–</span>`);
 
 function rgba(hex, a) {
   const n = parseInt(hex.slice(1), 16);
@@ -170,7 +195,7 @@ async function selectPoster(id) {
 
 function layout() {
   const p = state.poster;
-  if (!p || !state.img) return;
+  if (!p || !state.img || $("#explorer").hidden) return;
   const [x0, y0, x1, y1] = p.bounds;
   const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
   const stage = $("#stage");
@@ -231,6 +256,7 @@ function selectEntry(entry) {
   state.heat.key = null;
   const res = entry.result;
   res.byNum = Object.fromEntries(res.regions.map((r) => [r.num, r]));
+  state.picked[entry.poster] = entry.params;
   loadParams(entry.params);
   setStatus(`Showing: ${res.label}`);
   hideMsg();
@@ -266,8 +292,9 @@ function renderRegions() {
   const res = state.current && state.current.result;
   $("#regions tbody").innerHTML = !res ? "" : res.regions.map((r) => `
     <tr><td><i class="swatch" style="background:${r.color}"></i>R${r.num}</td>
+      <td class="content-cell">${contentHTML(r.content)}</td>
       <td>${fmt(r.pct_gaze, 1)}%</td><td>${fmt(r.pct_first_fix, 0)}%</td>
-      <td>${r.n_fixations}</td><td>${r.n_participants}</td></tr>`).join("");
+      <td>${r.n_participants}</td></tr>`).join("");
 }
 
 function renderScores() {
@@ -314,8 +341,12 @@ function fillParticipants() {
   const sel = $("#replay-pid"), prev = sel.value;
   const rec = res && res.recommended;
   const ordered = rec ? [rec, ...pids.filter((p) => p !== rec)] : pids;
-  sel.innerHTML = ordered.map((p) => `<option value="${p}">${p === rec ? `★ ${p} (closest to the group)` : p}</option>`).join("");
-  if (pids.includes(prev)) sel.value = prev;
+  sel.innerHTML = (res ? `<option value="${AVG}">All participants (average)</option>` : "")
+    + ordered.map((p) => `<option value="${p}">${p === rec ? `★ ${p} (closest to the group)` : p}</option>`).join("");
+  const want = state.replay.wantPid;
+  if (res && want && (want === AVG || pids.includes(want))) { sel.value = want; state.replay.wantPid = null; }
+  else if (pids.includes(prev) || (prev === AVG && res)) sel.value = prev;
+  else if (rec) sel.value = rec;
 
   if (res) {
     const ht = $("#heat-time");
@@ -349,9 +380,12 @@ function draw() {
     drawHeat(res);
     if ($("#heat-hulls").checked) { drawHulls(res, false); drawLabels(res); }
   } else {
+    const avg = state.replay.mode === "avg" && state.replay.entry === state.current;
+    if (avg) drawAverageHeat(res);
     drawHulls(res, false);
     drawLabels(res);
-    drawReplay(res);
+    if (avg) drawOrderBadges(res);
+    else drawReplay(res);
   }
 }
 
@@ -427,20 +461,27 @@ function drawHeat(res) {
   const radius = +$("#heat-radius").value;
   const key = `${state.current.id}|${who}|${tmax}|${radius}`;
   if (state.heat.key !== key) {
-    state.heat.canvas = computeHeat(res, who, tmax, radius);
+    const heat = computeHeat(res, who, tmax, radius);
+    state.heat.canvas = heat && heat.canvas;
     state.heat.key = key;
   }
-  if (!state.heat.canvas) return;
+  paintHeat(state.heat.canvas, +$("#heat-opacity").value);
+}
+
+function paintHeat(heatCanvas, opacity) {
+  if (!heatCanvas) return;
   const [x0, y0, x1, y1] = state.poster.bounds;
   ctx.save();
-  ctx.globalAlpha = +$("#heat-opacity").value;
+  ctx.globalAlpha = opacity;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(state.heat.canvas, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+  ctx.drawImage(heatCanvas, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
   ctx.restore();
 }
 
-function computeHeat(res, who, tmax, radiusPct) {
+/* Returns {canvas, max}. norm fixes the colour scale (e.g. to the full
+   viewing time's maximum, so a build-up animation is comparable frame to frame). */
+function computeHeat(res, who, tmax, radiusPct, norm) {
   const [x0, y0, x1, y1] = state.poster.bounds;
   const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
   const gw = 260, cell = bw / gw, gh = Math.max(1, Math.round(bh / cell));
@@ -472,20 +513,21 @@ function computeHeat(res, who, tmax, radiusPct) {
   if (!used) return null;
   let max = 0;
   for (const v of grid) if (v > max) max = v;
+  const scaleMax = norm || max;
   const out = document.createElement("canvas");
   out.width = gw; out.height = gh;
   const g = out.getContext("2d");
   const img = g.createImageData(gw, gh);
   for (let i = 0; i < grid.length; i++) {
     // gamma < 1 so less-viewed areas stay visible next to the hottest spot
-    const li = Math.min(255, Math.round(Math.pow(grid[i] / max, HEAT_GAMMA) * 255)) * 4;
+    const li = Math.min(255, Math.round(Math.pow(Math.min(1, grid[i] / scaleMax), HEAT_GAMMA) * 255)) * 4;
     img.data[i * 4] = HEAT_LUT[li];
     img.data[i * 4 + 1] = HEAT_LUT[li + 1];
     img.data[i * 4 + 2] = HEAT_LUT[li + 2];
     img.data[i * 4 + 3] = HEAT_LUT[li + 3];
   }
   g.putImageData(img, 0, 0);
-  return out;
+  return { canvas: out, max };
 }
 
 /* ------------------------------------------------------------ replay --- */
@@ -495,6 +537,18 @@ async function prepareReplay() {
   const pid = $("#replay-pid").value;
   if (!entry || !pid) return;
   const ck = `${entry.poster}/${pid}`;
+  const r = state.replay;
+
+  if (pid === AVG) {
+    let end = 0;
+    for (const v of entry.result.fixations.t_end) if (v != null && v > end) end = v;
+    if (r.pid !== ck) { r.now = r.startAt || 0; r.startAt = null; }
+    Object.assign(r, { pid: ck, mode: "avg", gaze: { duration: end }, entry,
+                       visits: null, region: null, sampleRegion: null });
+    finishReplaySetup();
+    return;
+  }
+
   let g = state.gazeCache.get(ck);
   if (!g) {
     try {
@@ -509,9 +563,9 @@ async function prepareReplay() {
   }
   if (state.current !== entry || $("#replay-pid").value !== pid) return;
 
-  const r = state.replay;
   if (r.pid !== ck) { r.now = r.startAt || 0; r.startAt = null; }
   r.pid = ck;
+  r.mode = "pid";
   r.gaze = g;
 
   // the cluster being fixated at each gaze sample (0 = saccade / not clustered)
@@ -527,14 +581,152 @@ async function prepareReplay() {
   }
   r.sampleRegion = region;
   r.entry = entry;
-  $("#scrub").max = Math.round(g.duration);
+  r.visits = personVisits(entry.result, pid);
+  finishReplaySetup();
+}
+
+function finishReplaySetup() {
+  const r = state.replay;
+  r.activeVisit = null;
+  $("#scrub").max = Math.round(r.gaze.duration);
+  renderViewerSummary();
   updateClock();
   draw();
 }
 
+/* One participant's fixations in time order, with consecutive fixations in
+   the same region merged into one visit. */
+function personVisits(res, pid) {
+  const f = res.fixations;
+  const idx = [];
+  for (let i = 0; i < f.pid.length; i++) if (f.pid[i] === pid) idx.push(i);
+  idx.sort((a, b) => f.t_start[a] - f.t_start[b]);
+  const visits = [];
+  for (const i of idx) {
+    const last = visits[visits.length - 1];
+    if (last && last.num === f.region[i]) {
+      last.t_end = f.t_end[i]; last.dur += f.dur[i]; last.n++;
+    } else {
+      visits.push({ num: f.region[i], t_start: f.t_start[i], t_end: f.t_end[i], dur: f.dur[i], n: 1 });
+    }
+  }
+  return visits;
+}
+
+function renderViewerSummary() {
+  const el = $("#viewer-summary");
+  const r = state.replay, entry = state.current;
+  if (!entry || r.entry !== entry) { el.innerHTML = ""; return; }
+  const res = entry.result;
+
+  if (r.mode === "avg") {
+    $("#replay-hint").textContent = "The heatmap builds up as the group's fixations add up over time (like "
+      + "average_gaze_animation.gif). Each region gets its number in the group's order once the group has, "
+      + "on average, reached it.";
+    const most = res.regions[0];
+    const first = res.regions.reduce((a, b) => (b.pct_first_fix > a.pct_first_fix ? b : a));
+    const people = new Set(res.fixations.pid).size;
+    el.innerHTML = `
+      <h3>All participants (${people} people)</h3>
+      <div class="facts">
+        <div class="fact"><span class="lbl">Looked at most</span>${rchip(most)} ${Math.round(most.pct_gaze)}% of all fixation time
+          <span class="what">${contentHTML(most.content)}</span></div>
+        <div class="fact"><span class="lbl">Most common first look</span>${rchip(first)} first for ${Math.round(first.pct_first_fix)}% of people
+          <span class="what">${contentHTML(first.content)}</span></div>
+      </div>
+      <h4>Regions in the order the group reached them</h4>
+      <p class="hint">Ordered by the average time of each person's first look at the region (the visit order used in
+        eye_tracking_analysis.R).</p>
+      <ol class="order-list" id="group-order">${res.group_order.map((n) => {
+        const g = res.byNum[n];
+        return `<li data-t="${g.avg_entry_ms}">${rchip(g)}<span>${contentHTML(g.content, false)}</span>
+          <span class="meta">reached after ${secs(g.avg_entry_ms)} on average · by ${Math.round(g.coverage)}% of people
+          · ${Math.round(g.pct_gaze)}% of fixation time</span></li>`;
+      }).join("")}</ol>`;
+    return;
+  }
+
+  $("#replay-hint").textContent = "The dot takes the colour of the cluster being fixated and turns white during "
+    + "saccades. ★ marks the participant whose viewing best matches the group's for this clustering.";
+  const pid = r.pid.split("/").pop();
+  const v = r.visits || [];
+  if (!v.length) {
+    el.innerHTML = `<h3>${esc(pid)}</h3><p class="muted">None of ${esc(pid)}'s fixations fall in a region for this clustering.</p>`;
+    return;
+  }
+  const time = {};
+  let total = 0;
+  for (const x of v) { time[x.num] = (time[x.num] || 0) + x.dur; total += x.dur; }
+  const longest = +Object.entries(time).sort((a, b) => b[1] - a[1])[0][0];
+  const firstAt = {};
+  for (const x of v) if (!(x.num in firstAt)) firstAt[x.num] = x.t_start;
+  const seen = Object.keys(firstAt).map(Number).sort((a, b) => firstAt[a] - firstAt[b]);
+  const firstR = res.byNum[v[0].num], longR = res.byNum[longest];
+
+  el.innerHTML = `
+    <h3>${esc(pid)}</h3>
+    <div class="facts">
+      <div class="fact"><span class="lbl">Looked at first</span>${rchip(firstR)} at ${secs(v[0].t_start)}
+        <span class="what">${contentHTML(firstR.content)}</span></div>
+      <div class="fact"><span class="lbl">Looked at longest</span>${rchip(longR)} ${secs(time[longest])}
+        (${pct(time[longest] / total)} of their time in regions)
+        <span class="what">${contentHTML(longR.content)}</span></div>
+    </div>
+    <h4>Regions in the order ${esc(pid)} first looked at them · ${seen.length} of ${res.regions.length}</h4>
+    <ol class="order-list">${seen.map((n) => {
+      const g = res.byNum[n];
+      return `<li>${rchip(g)}<span>${contentHTML(g.content, false)}</span>
+        <span class="meta">first at ${secs(firstAt[n])} · ${secs(time[n])} in total</span></li>`;
+    }).join("")}</ol>
+    <h4>Full path · ${v.length} visits</h4>
+    <div class="chips" id="visit-chips">${v.map((x, i) => `${i ? '<span class="arrow">→</span>' : ""}<span class="rchip"
+      data-i="${i}" style="background:${res.byNum[x.num].color}" title="${secs(x.t_start)} – ${secs(x.t_end)}">R${x.num}
+      <small>${(x.dur / 1000).toFixed(1)} s</small></span>`).join("")}</div>`;
+}
+
+/* the group's replay: fixation heatmap building up over time, on the colour
+   scale of the full viewing time */
+function drawAverageHeat(res) {
+  const r = state.replay;
+  const radius = +$("#heat-radius").value;
+  const fullKey = `${state.current.id}|${radius}`;
+  if (r.avgFullKey !== fullKey) {
+    const full = computeHeat(res, "all", Infinity, radius);
+    r.avgFullMax = full ? full.max : 1;
+    r.avgFullKey = fullKey;
+    r.avgKey = null;
+  }
+  const bucket = Math.floor(r.now / 100);
+  const key = `${fullKey}|${bucket}`;
+  if (r.avgKey !== key) {
+    const heat = computeHeat(res, "all", (bucket + 1) * 100, radius, r.avgFullMax);
+    r.avgCanvas = heat && heat.canvas;
+    r.avgKey = key;
+  }
+  paintHeat(r.avgCanvas, 0.8);
+}
+
+function drawOrderBadges(res) {
+  const r = state.replay;
+  ctx.font = `bold ${px(12)}px system-ui, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  res.group_order.forEach((n, i) => {
+    const g = res.byNum[n];
+    if (g.avg_entry_ms > r.now) return;
+    const [cx, cy] = g.center;
+    const by = cy - px(22);
+    ctx.beginPath();
+    ctx.arc(cx, by, px(10), 0, Math.PI * 2);
+    ctx.fillStyle = "#fff"; ctx.fill();
+    ctx.strokeStyle = g.color; ctx.lineWidth = px(3); ctx.stroke();
+    ctx.fillStyle = "#111";
+    ctx.fillText(String(i + 1), cx, by + px(0.5));
+  });
+}
+
 function drawReplay(res) {
   const r = state.replay;
-  if (!r.gaze || r.entry !== state.current) return;
+  if (!r.gaze || r.entry !== state.current || r.mode !== "pid") return;
   const g = r.gaze, now = r.now;
   const lo = lowerBound(g.t, now - TRAIL_MS), hi = upperBound(g.t, now);
 
@@ -577,6 +769,18 @@ function updateClock() {
   const where = r.region ? `  ·  in R${r.region.num}` : "";
   $("#clock").textContent = `${(r.now / 1000).toFixed(1)} s / ${(r.gaze.duration / 1000).toFixed(0)} s${where}`;
   $("#scrub").value = Math.round(r.now);
+
+  // follow the replay in the summary
+  if (r.mode === "avg") {
+    $$("#group-order li").forEach((li) => li.classList.toggle("pending", +li.dataset.t > r.now));
+  } else if (r.visits) {
+    const i = r.visits.findIndex((v) => v.t_start <= r.now && r.now <= v.t_end);
+    $$("#visit-chips .rchip").forEach((c) => {
+      const k = +c.dataset.i;
+      c.classList.toggle("on", k === i);
+      c.classList.toggle("past", r.visits[k].t_end < r.now && k !== i);
+    });
+  }
 }
 
 function play() {
@@ -603,6 +807,103 @@ function tick(ts) {
     if (state.view === "replay") { draw(); updateClock(); }
   }
   requestAnimationFrame(tick);
+}
+
+/* ------------------------------------------------------------ compare -- */
+
+let compareToken = 0;
+
+function showCompare(on) {
+  state.page = on ? "compare" : "explore";
+  $("#compare").hidden = !on;
+  $("#explorer").hidden = on;
+  $(".poster-pick").hidden = on;
+  $("#poster-meta").hidden = on;
+  $("#compare-toggle").textContent = on ? "← Back to explorer" : "Compare all posters";
+  if (on) { pause(); loadCompare(); } else layout();
+}
+
+async function loadCompare() {
+  const token = ++compareToken;
+  const status = $("#cmp-status");
+  status.classList.remove("error");
+  status.textContent = "Clustering every poster… the first time takes about 15 seconds.";
+  // only runs whose settings differ from demo.py's count as picks
+  const isDefault = (p) => {
+    const d = state.posters.find((x) => x.id === p.poster).defaults;
+    return p.method === "dbscan"
+      ? p.eps === d.eps && p.min_samples === d.min_samples
+      : p.linkage === d.linkage && p.k_mode === "auto" && p.k_min === 6 && p.k_max === 14 && p.tolerance === 0.15;
+  };
+  const overrides = {};
+  if ($("#cmp-picked").checked) {
+    for (const [id, p] of Object.entries(state.picked)) if (!isDefault(p)) overrides[id] = p;
+  }
+  const body = { method: $("#cmp-method").value, overrides };
+  try {
+    const rows = await api("/api/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (token !== compareToken) return;
+    renderCompare(rows);
+    const picked = rows.filter((r) => r.picked).map((r) => r.name);
+    status.textContent = picked.length
+      ? `Using the run you picked for ${picked.join(", ")}; the other posters use demo.py's settings.`
+      : "All posters use demo.py's settings. Pick a different run for a poster in the explorer to use it here.";
+  } catch (e) {
+    if (token === compareToken) { status.textContent = e.message; status.classList.add("error"); }
+  }
+}
+
+function renderCompare(rows) {
+  const ok = rows.filter((r) => !r.error);
+
+  $("#cmp-legend").innerHTML = TYPE_ORDER.map((t) => `<span><i style="background:var(--t-${t})"></i>${TYPE_NAMES[t]}</span>`).join("")
+    + `<span>R1 is each poster's most-viewed region; region colours match the explorer.</span>`;
+
+  $("#cmp-table tbody").innerHTML = rows.map((r) => {
+    const name = `<a data-poster="${esc(r.id)}">${esc(r.name)}</a>`;
+    if (r.error) return `<tr><td>${name}</td><td colspan="4" class="muted">${esc(r.error)}</td></tr>`;
+    const mv = r.most_viewed, fl = r.first_look;
+    const order = r.order.slice(0, 5).map((g, i) => `<div>${i + 1}. ${rchip(g)} ${typeBadge(g.content.type)}${esc(g.content.label)}
+      <span class="muted">${secs(g.avg_entry_ms)}</span></div>`).join("")
+      + (r.order.length > 5 ? `<div class="muted">+ ${r.order.length - 5} more</div>` : "");
+    const share = r.type_share;
+    const bar = TYPE_ORDER.map((t) => `<i style="width:${(share[t] || 0) * 100}%;background:var(--t-${t})"
+      title="${TYPE_NAMES[t]} ${pct(share[t] || 0)}"></i>`).join("");
+    const legend = TYPE_ORDER.filter((t) => share[t] >= 0.005).map((t) => `${TYPE_NAMES[t]} ${pct(share[t])}`).join(" · ");
+    return `<tr>
+      <td>${name}<small>${esc(r.label)}${r.picked ? " · your pick" : ""}</small></td>
+      <td class="content-cell">${rchip(mv)} ${Math.round(mv.pct_gaze)}% of fixation time<br>${contentHTML(mv.content)}</td>
+      <td class="content-cell">${rchip(fl)} first for ${Math.round(fl.pct_first_fix)}% of people<br>${contentHTML(fl.content)}</td>
+      <td><div class="order">${order}</div></td>
+      <td><div class="bar">${bar}</div><div class="bar-legend">${legend}</div></td></tr>`;
+  }).join("");
+
+  // plain-language summary across posters
+  const el = $("#cmp-summary");
+  if (!ok.length) { el.hidden = true; return; }
+  const groupBy = (key) => {
+    const m = {};
+    for (const r of ok) (m[r[key].content.type] ||= []).push(r.name);
+    return TYPE_ORDER.filter((t) => m[t]).sort((a, b) => m[b].length - m[a].length)
+      .map((t) => `<b>${TYPE_NAMES[t].toLowerCase()}</b> on ${m[t].length} (${m[t].map(esc).join(", ")})`).join("; ");
+  };
+  const mean = (t) => ok.reduce((s, r) => s + (r.type_share[t] || 0), 0) / ok.length;
+  const top = (t) => ok.reduce((a, b) => ((b.type_share[t] || 0) > (a.type_share[t] || 0) ? b : a));
+  const extremes = ["text", "image", "shape"].filter((t) => (top(t).type_share[t] || 0) > 0.05)
+    .map((t) => `${TYPE_NAMES[t].toLowerCase()}: <b>${esc(top(t).name)}</b> (${pct(top(t).type_share[t])})`).join("; ");
+  const differ = ok.filter((r) => r.first_look.content.type !== r.most_viewed.content.type);
+  el.innerHTML = `
+    <h3>Across the ${ok.length} posters</h3>
+    <ul>
+      <li>The most-viewed region was ${groupBy("most_viewed")}.</li>
+      <li>The region people looked at first was ${groupBy("first_look")}.</li>
+      <li>On average, ${pct(mean("text"))} of fixation time was on text, ${pct(mean("image"))} on images,
+        ${pct(mean("shape"))} on shapes and ${pct(mean("background"))} on empty areas or background.</li>
+      <li>Largest share of fixation time on ${extremes}.</li>
+      <li>On ${differ.length} poster${differ.length === 1 ? "" : "s"} the first look went to a different kind of content
+        than the most-viewed region${differ.length ? ` (${differ.map((r) => `${esc(r.name)}: first ${TYPE_NAMES[r.first_look.content.type].toLowerCase()}, most ${TYPE_NAMES[r.most_viewed.content.type].toLowerCase()}`).join("; ")})` : ""}.</li>
+    </ul>`;
+  el.hidden = false;
 }
 
 /* ------------------------------------------------------------ wiring --- */
@@ -664,6 +965,17 @@ function bind() {
   });
 
   window.addEventListener("resize", debounce(layout, 150));
+
+  $("#compare-toggle").addEventListener("click", () => showCompare(state.page !== "compare"));
+  $("#cmp-method").addEventListener("change", loadCompare);
+  $("#cmp-picked").addEventListener("change", loadCompare);
+  $("#cmp-table tbody").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-poster]");
+    if (!a) return;
+    showCompare(false);
+    $("#poster").value = a.dataset.poster;
+    selectPoster(a.dataset.poster);
+  });
 }
 
 async function init() {
@@ -687,6 +999,8 @@ async function init() {
   const view = $(`#view button[data-view="${hash.get("view")}"]`);
   if (view) view.click();
   if (hash.has("t")) state.replay.startAt = +hash.get("t") * 1000;
+  if (hash.get("who")) state.replay.wantPid = hash.get("who") === "average" ? AVG : hash.get("who");
+  if (hash.get("page") === "compare") showCompare(true);
   await selectPoster(sel.value);
 }
 

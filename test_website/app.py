@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import json
 import math
 import pickle
 import re
@@ -126,6 +127,76 @@ def column(a, digits=1):
     return [round(v, digits) if math.isfinite(v) else None for v in a.tolist()]
 
 
+# ---------------------------------------------------------------- content ---
+# test_website/poster_content.json says what is where on each poster (text,
+# image, shape, background); see the notes at the top of that file.
+
+CONTENT_FILE = HERE / "poster_content.json"
+TYPES = ("text", "image", "shape", "background")
+_content = {"mtime": None, "posters": {}}
+
+
+def poster_elements(slug) -> list[dict]:
+    """The poster's content elements with boxes in image pixels. The file is
+    read again whenever it changes, so edits apply without a restart."""
+    mtime = CONTENT_FILE.stat().st_mtime if CONTENT_FILE.exists() else None
+    if mtime != _content["mtime"]:
+        raw = {}
+        if mtime is not None:
+            with open(CONTENT_FILE, encoding="utf-8") as fh:
+                raw = json.load(fh).get("posters", {})
+        _content.update(mtime=mtime, posters=raw)
+        RESULTS.clear()   # cached results carry the old descriptions
+    x0, y0, x1, y1 = POSTERS[slug]["bounds"]
+    bw, bh = x1 - x0 + 1, y1 - y0 + 1
+    out = []
+    for el in _content["posters"].get(slug, []):
+        boxes = [(x0 + b[0] / 100 * bw, y0 + b[1] / 100 * bh,
+                  x0 + b[2] / 100 * bw, y0 + b[3] / 100 * bh) for b in el.get("boxes", [])]
+        kind = el.get("type") if el.get("type") in TYPES else "shape"
+        out.append({"label": el.get("label", "?"), "type": kind, "boxes": boxes})
+    return out
+
+
+def assign_elements(elements, x, y) -> np.ndarray:
+    """Index of the element under each point (-1 = none). Where boxes
+    overlap, the smallest box wins, so text printed on a shape counts as text."""
+    best = np.full(len(x), -1)
+    best_area = np.full(len(x), np.inf)
+    for i, el in enumerate(elements):
+        for bx0, by0, bx1, by1 in el["boxes"]:
+            area = (bx1 - bx0) * (by1 - by0)
+            inside = (x >= bx0) & (x <= bx1) & (y >= by0) & (y <= by1) & (area < best_area)
+            best[inside] = i
+            best_area[inside] = area
+    return best
+
+
+def describe_content(elements, element, dur) -> dict:
+    """What a region contains: the content elements its fixation time falls
+    on, largest share first."""
+    total = dur.sum()
+    if total <= 0:
+        return {"label": "Unknown", "type": "background", "share": 0, "parts": []}
+    shares = {}
+    for e, d in zip(element.tolist(), dur.tolist()):
+        shares[e] = shares.get(e, 0.0) + d
+    parts = []
+    for e, d in sorted(shares.items(), key=lambda kv: -kv[1])[:3]:
+        if e < 0:
+            parts.append({"label": "Empty area / background", "type": "background", "share": num(d / total, 3)})
+        else:
+            parts.append({"label": elements[e]["label"], "type": elements[e]["type"], "share": num(d / total, 3)})
+    return {**parts[0], "parts": parts}
+
+
+def type_share(elements, element, dur) -> dict:
+    """Share of fixation time on each content type."""
+    kinds = np.array([elements[e]["type"] if e >= 0 else "background" for e in element.tolist()])
+    total = dur.sum()
+    return {t: num(dur[kinds == t].sum() / total, 4) if total else 0 for t in TYPES}
+
+
 def get_poster(slug):
     poster = POSTERS.get(slug)
     if poster is None:
@@ -176,51 +247,89 @@ def poster_image(slug):
     return send_file(mca.POSTER_DIR / get_poster(slug)["file"], max_age=3600)
 
 
-@app.post("/api/cluster")
-def cluster():
-    body = request.get_json(force=True) or {}
-    poster = get_poster(body.get("poster"))
+class NoClusters(Exception):
+    pass
+
+
+def parse_params(body) -> dict:
+    """Validated, normalised clustering settings (also the cache key)."""
+    slug = body.get("poster")
+    get_poster(slug)
     method = body.get("method")
-    fix, w, h = poster["fix"], poster["width"], poster["height"]
-
-    log = io.StringIO()   # clustering.py prints its working; keep the console readable
-    with contextlib.redirect_stdout(log):
-        if method == "hierarchical":
-            linkage = body.get("linkage")
-            if linkage not in LINKAGES:
-                abort(400, f"linkage must be one of {LINKAGES}")
-            if body.get("k_mode") == "fixed":
-                k = arg(body, "k", int, 2, 30)
-                k_min, k_max, tolerance = 6, 14, 0.15   # only for the reference score table
-            else:
-                k = None
-                k_min = arg(body, "k_min", int, 2, 30)
-                k_max = arg(body, "k_max", int, k_min, 30)
-                tolerance = arg(body, "tolerance", float, 0, 1)
-            clust = cluster_hierarchical_auto(fix, poster["stim"], linkage, w, h,
-                                              k=k, k_min=k_min, k_max=k_max, tolerance=tolerance)
-            label = (f"Hierarchical ({linkage}), "
-                     + (f"k={k}" if k else f"auto k {k_min}-{k_max}, tol {tolerance:g}"))
-        elif method == "dbscan":
-            eps = arg(body, "eps", float, 1, 500)
-            min_samples = arg(body, "min_samples", int, 1, 500)
-            clust = cluster_dbscan(fix, poster["stim"], eps, min_samples, w, h)
-            label = f"DBSCAN, eps={eps:g}, min_samples={min_samples}"
+    if method == "hierarchical":
+        linkage = body.get("linkage")
+        if linkage not in LINKAGES:
+            abort(400, f"linkage must be one of {LINKAGES}")
+        p = {"poster": slug, "method": method, "linkage": linkage}
+        if body.get("k_mode") == "fixed":
+            p.update(k_mode="fixed", k=arg(body, "k", int, 2, 30))
         else:
-            abort(400, "method must be hierarchical or dbscan")
+            k_min = arg(body, "k_min", int, 2, 30)
+            p.update(k_mode="auto", k_min=k_min, k_max=arg(body, "k_max", int, k_min, 30),
+                     tolerance=arg(body, "tolerance", float, 0, 1))
+        return p
+    if method == "dbscan":
+        return {"poster": slug, "method": method, "eps": arg(body, "eps", float, 1, 500),
+                "min_samples": arg(body, "min_samples", int, 1, 500)}
+    abort(400, "method must be hierarchical or dbscan")
 
+
+def default_params(slug, method) -> dict:
+    d = POSTERS[slug]["defaults"]
+    if method == "dbscan":
+        return {"poster": slug, "method": "dbscan", "eps": d["eps"], "min_samples": d["min_samples"]}
+    return {"poster": slug, "method": "hierarchical", "linkage": d["linkage"],
+            "k_mode": "auto", "k_min": 6, "k_max": 14, "tolerance": 0.15}
+
+
+RESULTS: dict[str, dict] = {}   # cache: settings -> result
+
+
+def compute(params: dict) -> dict:
+    """Cluster one poster and describe the result. Raises NoClusters."""
+    key = json.dumps(params, sort_keys=True)
+    if key in RESULTS:
+        return RESULTS[key]
+
+    slug = params["poster"]
+    poster = POSTERS[slug]
+    fix, w, h = poster["fix"], poster["width"], poster["height"]
+    with contextlib.redirect_stdout(io.StringIO()):   # clustering.py prints its working
+        if params["method"] == "hierarchical":
+            fixed = params["k_mode"] == "fixed"
+            clust = cluster_hierarchical_auto(
+                fix, poster["stim"], params["linkage"], w, h,
+                k=params["k"] if fixed else None,
+                k_min=6 if fixed else params["k_min"], k_max=14 if fixed else params["k_max"],
+                tolerance=0.15 if fixed else params["tolerance"])
+            label = (f"Hierarchical ({params['linkage']}), "
+                     + (f"k={params['k']}" if fixed else
+                        f"auto k {params['k_min']}-{params['k_max']}, tol {params['tolerance']:g}"))
+        else:
+            clust = cluster_dbscan(fix, poster["stim"], params["eps"], params["min_samples"], w, h)
+            label = f"DBSCAN, eps={params['eps']:g}, min_samples={params['min_samples']}"
     if clust is None:
-        return jsonify({"error": "This setting found fewer than 2 clusters. "
-                                 "For DBSCAN, try a larger eps or a smaller min_samples."}), 422
+        raise NoClusters("This setting found fewer than 2 clusters. "
+                         "For DBSCAN, try a larger eps or a smaller min_samples.")
 
     stats = region_stats(clust)
     data = clust["data"]
     num_of = dict(zip(stats["rank_map"]["region"], stats["rank_map"]["region_num"]))
     table = stats["table"].set_index("region")
+    elements = poster_elements(slug)
+    element = assign_elements(elements, data["x"].to_numpy(), data["y"].to_numpy())
+    dur = data["duration"].to_numpy(dtype=float)
+
+    # the group's viewing order, as in output/eye_tracking_analysis.R: regions
+    # sorted by the mean time of each person's first fixation there
+    entry = data.groupby(["participant", "region"])["rel_start"].min()
+    avg_entry = entry.groupby(level="region").mean()
+    coverage = entry.groupby(level="region").size() / stats["n_ppl"] * 100
 
     regions = []
     for region, n in sorted(num_of.items(), key=lambda kv: kv[1]):
-        rows = data[data["region"] == region]
+        mask = (data["region"] == region).to_numpy()
+        rows = data[mask]
         pts = rows[["x", "y"]].to_numpy()
         hull = mca.hull_points(pts)
         regions.append({
@@ -230,9 +339,13 @@ def cluster():
             "pct_first_fix": num(table.loc[region, "pct_first_fix"], 2),
             "n_fixations": int(len(rows)),
             "n_participants": int(rows["participant"].nunique()),
+            "avg_entry_ms": num(avg_entry[region], 0),
+            "coverage": num(coverage[region], 1),
             "center": column(pts.mean(axis=0)),
             "hull": [column(p) for p in hull] if hull is not None else [],
+            "content": describe_content(elements, element[mask], dur[mask]),
         })
+    group_order = [int(num_of[r]) for r in avg_entry.sort_values().index]
 
     region_num = data["region"].map(num_of).astype(int)
     recommended = mca.pick_participant({"m": (clust, stats)}, poster["gaze"])
@@ -242,9 +355,9 @@ def cluster():
         scores = [{"k": int(r.k), "sil": num(r.sil), "db": num(r.db), "ch": num(r.ch, 1),
                    "score": num(r.score)} for r in clust["scores"].itertuples()]
 
-    return jsonify({
+    result = {
         "label": label,
-        "method": method,
+        "method": params["method"],
         "k": int(clust["k"]),
         "selected_k": int(clust.get("selected_k", clust["k"])),
         "metrics": {"sil": num(clust["sil"]), "db": num(clust["db"]), "ch": num(clust["ch"], 1)},
@@ -252,15 +365,73 @@ def cluster():
         "n_input": int(len(fix)),
         "scores": scores,
         "regions": regions,
+        "group_order": group_order,
         "recommended": recommended,
+        "elements": [{"label": e["label"], "type": e["type"]} for e in elements],
+        "type_share": type_share(elements, element, dur),
         "fixations": {
             "pid": data["participant"].tolist(),
             "x": column(data["x"]), "y": column(data["y"]),
             "dur": column(data["duration"], 0),
             "t_start": column(data["t_start"]), "t_end": column(data["t_end"]),
             "region": region_num.tolist(),
+            "element": element.tolist(),
         },
-    })
+    }
+    RESULTS[key] = result
+    return result
+
+
+@app.post("/api/cluster")
+def cluster():
+    params = parse_params(request.get_json(force=True) or {})
+    try:
+        return jsonify(compute(params))
+    except NoClusters as e:
+        return jsonify({"error": str(e)}), 422
+
+
+@app.post("/api/compare")
+def compare():
+    """One summary per poster: the default clustering, or the settings the
+    page sends for posters where a run was picked."""
+    body = request.get_json(force=True) or {}
+    method = body.get("method", "hierarchical")
+    if method not in ("hierarchical", "dbscan"):
+        abort(400, "method must be hierarchical or dbscan")
+    overrides = body.get("overrides") or {}
+
+    out = []
+    for slug, poster in POSTERS.items():
+        default = default_params(slug, method)
+        params = default
+        if slug in overrides:
+            try:
+                params = parse_params({**overrides[slug], "poster": slug})
+            except HTTPException:
+                pass   # a bad override falls back to the default
+        row = {"id": slug, "name": poster["stim"], "picked": params != default}
+        try:
+            res = compute(params)
+        except NoClusters as e:
+            out.append({**row, "error": str(e)})
+            continue
+        by_num = {r["num"]: r for r in res["regions"]}
+        first = max(res["regions"], key=lambda r: r["pct_first_fix"] or 0)
+        out.append({
+            **row,
+            "label": res["label"], "k": res["k"],
+            "most_viewed": slim_region(res["regions"][0]),
+            "first_look": slim_region(first),
+            "order": [slim_region(by_num[n]) for n in res["group_order"]],
+            "type_share": res["type_share"],
+        })
+    return jsonify(out)
+
+
+def slim_region(r):
+    return {k: r[k] for k in ("num", "color", "pct_gaze", "pct_first_fix",
+                              "avg_entry_ms", "coverage", "content")}
 
 
 @app.get("/api/gaze/<slug>/<pid>")
