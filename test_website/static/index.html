@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Poster Gaze Explorer</title>
   <meta name="description" content="Where people look on graphic-design posters: eye-tracking clusters, heatmaps and gaze replays.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 16s5-9 14-9 14 9 14 9-5 9-14 9S2 16 2 16z' fill='%232563eb'/%3E%3Ccircle cx='16' cy='16' r='5' fill='white'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23111'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b6ef5'/%3E%3Cpath d='M5 16s4-7 11-7 11 7 11 7-4 7-11 7S5 16 5 16z' fill='white'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%233b6ef5'/%3E%3C/svg%3E">
   <script>
     // apply a saved theme before the page paints
     try { const t = localStorage.getItem("pce-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
@@ -15,86 +15,98 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1>Poster Gaze Explorer</h1>
-      <span class="muted" id="study-meta">Eye-tracking study</span>
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8"/><path d="M5 16s4-7 11-7 11 7 11 7-4 7-11 7S5 16 5 16z"/><circle cx="16" cy="16" r="4"/></svg>
+      </span>
+      <div>
+        <h1>Poster Gaze Explorer</h1>
+        <span class="sub" id="study-meta">Eye-tracking study</span>
+      </div>
     </div>
-    <label class="poster-pick">
-      <span>Poster</span>
-      <select id="poster"></select>
-    </label>
-    <span id="poster-meta" class="muted"></span>
+
+    <div class="poster-pick">
+      <button class="icon-btn" id="prev-poster" title="Previous poster (←)" aria-label="Previous poster">‹</button>
+      <select id="poster" aria-label="Poster"></select>
+      <button class="icon-btn" id="next-poster" title="Next poster (→)" aria-label="Next poster">›</button>
+      <span id="poster-meta" class="meta-chip"></span>
+    </div>
+
     <div class="top-actions">
-      <button id="present-toggle" class="ghost" title="Hide the settings so the poster fills the screen (P)">Present</button>
-      <button id="theme-toggle" class="ghost icon" title="Switch light / dark theme"></button>
-      <button id="compare-toggle" class="primary-outline">Compare all posters</button>
+      <button id="present-toggle" class="btn ghost" title="Hide the settings so the poster fills the screen (P)">Present</button>
+      <button id="theme-toggle" class="btn ghost square" title="Switch light / dark theme"></button>
+      <button id="compare-toggle" class="btn primary">Compare all posters</button>
     </div>
   </header>
 
   <!-- ======================= compare page ======================= -->
   <section id="compare" class="compare" hidden>
-    <div class="card compare-head">
+    <div class="compare-head">
       <div>
-        <h2>Compare all posters</h2>
-        <p class="hint">For each poster: the region people looked at most, the region they looked at first, the order the group
-          reached the regions, and how viewing time splits between text, images and shapes.</p>
+        <p class="eyebrow">All 15 posters</p>
+        <h2 class="page-title">How people looked at each poster</h2>
+        <p class="lead">The region people looked at most, the one they looked at first, the order the group reached the regions,
+          and how viewing time splits between text, images and shapes.</p>
       </div>
-      <div class="compare-controls">
-        <label class="row"><span>Clustering</span>
+      <div class="compare-controls card">
+        <label class="field"><span>Clustering</span>
           <select id="cmp-method">
             <option value="hierarchical">Hierarchical (default settings)</option>
             <option value="dbscan">DBSCAN (default settings)</option>
           </select></label>
-        <label class="check"><input type="checkbox" id="cmp-picked" checked> Use the settings I chose in the explorer, where I changed them</label>
+        <label class="check"><input type="checkbox" id="cmp-picked" checked> Use my own settings where I changed them</label>
       </div>
     </div>
     <div id="cmp-status" class="status"></div>
-    <div id="cmp-summary" class="card" hidden></div>
-    <div class="card">
-      <div class="legend-types" id="cmp-legend"></div>
-      <div class="table-wrap tall">
+    <div id="cmp-summary" class="card insights" hidden></div>
+    <div class="card flush">
+      <div class="table-head">
+        <h3 class="card-title">Poster by poster</h3>
+        <div class="legend-types" id="cmp-legend"></div>
+      </div>
+      <div class="table-wrap">
         <table id="cmp-table" class="cmp-table">
-          <thead><tr><th>Poster</th><th>Most viewed region</th><th>Looked at first</th>
-            <th>Order the group reached the regions</th><th>Fixation time by content type</th></tr></thead>
+          <thead><tr><th>Poster</th><th>Looked at most</th><th>Looked at first</th>
+            <th>Order the group reached the regions</th><th>Viewing time by content</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
     </div>
   </section>
 
+  <!-- ======================= explorer ======================= -->
   <div class="layout" id="explorer">
-    <!-- ======================= controls ======================= -->
     <aside class="sidebar">
       <section class="card">
-        <h2>1. Clustering method</h2>
-        <div class="seg" role="tablist" id="method">
+        <h3 class="card-title">Clustering</h3>
+        <div class="seg full" role="tablist" id="method">
           <button data-method="hierarchical" class="on">Hierarchical</button>
           <button data-method="dbscan">DBSCAN</button>
         </div>
 
         <div id="params-hierarchical" class="params">
-          <label class="row">
+          <label class="field">
             <span>Linkage</span>
             <select id="linkage">
-              <option value="complete">complete</option>
-              <option value="average">average</option>
-              <option value="ward">ward</option>
-              <option value="single">single</option>
+              <option value="complete">Complete</option>
+              <option value="average">Average</option>
+              <option value="ward">Ward</option>
+              <option value="single">Single</option>
             </select>
           </label>
-          <div class="row">
-            <span>Number of clusters (k)</span>
+          <div class="field">
+            <span>Number of clusters</span>
             <div class="seg small" id="k-mode">
               <button data-mode="auto" class="on">Auto</button>
               <button data-mode="fixed">Fixed</button>
             </div>
           </div>
           <div id="k-auto">
-            <label class="row"><span>Search k from</span>
+            <label class="field"><span>Search k from</span>
               <span class="pair"><input type="number" id="k-min" min="2" max="30" value="6">
               to <input type="number" id="k-max" min="2" max="30" value="14"></span></label>
             <label class="slider"><span>Tolerance <output id="tolerance-out">0.15</output></span>
               <input type="range" id="tolerance" min="0" max="0.5" step="0.01" value="0.15"></label>
-            <p class="hint">Auto picks the largest k whose combined score is within the tolerance of the best.</p>
+            <p class="hint">Picks the largest k whose combined score is within the tolerance of the best.</p>
           </div>
           <div id="k-fixed" hidden>
             <label class="slider"><span>k <output id="k-out">8</output></span>
@@ -103,25 +115,25 @@
         </div>
 
         <div id="params-dbscan" class="params" hidden>
-          <label class="slider"><span>eps (neighbourhood radius, px) <output id="eps-out">35</output></span>
+          <label class="slider"><span>Radius (eps, px) <output id="eps-out">35</output></span>
             <input type="range" id="eps" min="5" max="150" step="1" value="35"></label>
-          <label class="slider"><span>min_samples <output id="min-samples-out">10</output></span>
+          <label class="slider"><span>Minimum points <output id="min-samples-out">10</output></span>
             <input type="range" id="min-samples" min="2" max="60" step="1" value="10"></label>
-          <p class="hint">Larger eps merges nearby areas; larger min_samples needs denser areas to form a cluster.</p>
+          <p class="hint">A larger radius merges nearby areas; more minimum points needs denser areas to form a cluster.</p>
         </div>
 
         <div class="actions">
-          <button id="run" class="primary">Run clustering</button>
-          <button id="reset" class="ghost" title="The default settings for this poster">Reset to default</button>
+          <button id="run" class="btn primary grow">Run clustering</button>
+          <button id="reset" class="btn ghost" title="The default settings for this poster">Reset</button>
         </div>
-        <label class="check"><input type="checkbox" id="auto-run"> Re-run automatically when I change a setting</label>
+        <label class="check"><input type="checkbox" id="auto-run"> Re-run when a setting changes</label>
       </section>
 
       <section class="card">
-        <h2>2. Compare settings</h2>
-        <p class="hint">Each run is kept here. Click a row to show it; the best value of each score is highlighted.</p>
-        <div class="table-wrap">
-          <table id="history">
+        <h3 class="card-title">Runs</h3>
+        <p class="hint">Every run is kept. Click one to show it; the best score in each column is highlighted.</p>
+        <div class="table-wrap short">
+          <table id="history" class="data">
             <thead><tr><th>Setting</th><th title="regions kept">k</th>
               <th title="Silhouette: higher is better">Sil ↑</th>
               <th title="Davies-Bouldin: lower is better">DB ↓</th>
@@ -129,11 +141,10 @@
             <tbody></tbody>
           </table>
         </div>
-        <p id="history-empty" class="muted">No runs yet.</p>
+        <p id="history-empty" class="muted small">No runs yet.</p>
       </section>
     </aside>
 
-    <!-- ======================= views ======================= -->
     <main class="main">
       <div class="view-head">
         <div class="seg" id="view">
@@ -150,31 +161,31 @@
             <canvas id="canvas"></canvas>
             <div id="stage-msg" class="stage-msg">Loading…</div>
           </div>
-          <p class="keys"><kbd>←</kbd><kbd>→</kbd> poster · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> view ·
-            <kbd>Space</kbd> play / pause · <kbd>P</kbd> present · <kbd>C</kbd> compare</p>
+          <p class="keys"><kbd>←</kbd><kbd>→</kbd> poster <span>·</span> <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> view <span>·</span>
+            <kbd>Space</kbd> play <span>·</span> <kbd>P</kbd> present <span>·</span> <kbd>C</kbd> compare</p>
         </div>
 
         <div class="panel">
-          <div id="summary" class="card summary" hidden></div>
+          <div id="findings" class="card" hidden></div>
 
           <!-- clusters -->
           <div class="view-controls" data-for="clusters">
             <div class="card">
-              <div class="toggles">
-                <label class="check"><input type="checkbox" id="show-points" checked> Fixation points</label>
-                <label class="check"><input type="checkbox" id="show-hulls" checked> Outlines</label>
-                <label class="check"><input type="checkbox" id="show-labels" checked> Labels</label>
+              <div class="card-head">
+                <h3 class="card-title">Regions</h3>
+                <div class="toggles">
+                  <label class="check"><input type="checkbox" id="show-points"> Points</label>
+                  <label class="check"><input type="checkbox" id="show-hulls" checked> Outlines</label>
+                  <label class="check"><input type="checkbox" id="show-labels" checked> Labels</label>
+                </div>
               </div>
-              <table class="regions" id="regions">
-                <thead><tr><th>Region</th><th>Contains</th><th title="share of total fixation time">% gaze</th>
-                  <th title="share of participants whose first fixation landed here">First look</th></tr></thead>
-                <tbody></tbody>
-              </table>
+              <div id="regions" class="region-list"></div>
             </div>
+            <div id="summary" class="card" hidden></div>
             <div class="card" id="scores-card" hidden>
-              <h3>How auto chose k</h3>
-              <p class="hint">Scores for each k tried. The combined score averages the three, normalised.</p>
-              <table class="regions" id="scores">
+              <h3 class="card-title">How auto chose k</h3>
+              <p class="hint">Scores for each k tried; the combined score averages the three, normalised.</p>
+              <table class="data" id="scores">
                 <thead><tr><th>k</th><th>Sil ↑</th><th>DB ↓</th><th>CH ↑</th><th>Combined</th></tr></thead>
                 <tbody></tbody>
               </table>
@@ -184,36 +195,40 @@
           <!-- heatmap -->
           <div class="view-controls" data-for="heatmap" hidden>
             <div class="card">
-              <label class="row"><span>Whose gaze</span>
+              <h3 class="card-title">Heatmap</h3>
+              <label class="field"><span>Whose gaze</span>
                 <select id="heat-who"><option value="all">All participants</option></select></label>
-              <label class="slider"><span>First <output id="heat-time-out">all</output> of viewing</span>
+              <label class="slider"><span>Viewing time shown <output id="heat-time-out">all</output></span>
                 <input type="range" id="heat-time" min="1" max="20" step="1" value="20"></label>
               <label class="slider"><span>Blur radius <output id="heat-radius-out">3%</output></span>
                 <input type="range" id="heat-radius" min="1" max="8" step="0.25" value="3"></label>
               <label class="slider"><span>Opacity <output id="heat-opacity-out">0.70</output></span>
                 <input type="range" id="heat-opacity" min="0.2" max="1" step="0.05" value="0.7"></label>
-              <label class="check"><input type="checkbox" id="heat-hulls" checked> Show the chosen clustering's outlines</label>
-              <div class="legend"><span>less</span><i id="heat-legend"></i><span>more fixation time</span></div>
+              <label class="check"><input type="checkbox" id="heat-hulls" checked> Show region outlines</label>
+              <div class="legend"><span>less</span><i id="heat-legend"></i><span>more viewing time</span></div>
             </div>
           </div>
 
           <!-- replay -->
           <div class="view-controls" data-for="replay" hidden>
             <div class="card">
-              <label class="row"><span>Participant</span><select id="replay-pid"></select></label>
+              <label class="field"><span>Whose gaze</span><select id="replay-pid"></select></label>
               <div class="player">
-                <button id="play" class="primary round" title="Play / pause">▶</button>
-                <input type="range" id="scrub" min="0" max="1000" value="0" step="1">
+                <button id="play" class="play" title="Play / pause (Space)" aria-label="Play or pause">▶</button>
+                <div class="player-track">
+                  <input type="range" id="scrub" min="0" max="1000" value="0" step="1" aria-label="Replay time">
+                  <div class="player-meta">
+                    <span id="clock" class="clock">0.0 s</span>
+                    <span class="player-opts">
+                      <label class="check inline"><input type="checkbox" id="replay-loop" checked> Loop</label>
+                      <select id="speed" aria-label="Speed">
+                        <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+                        <option value="1" selected>1×</option><option value="2">2×</option>
+                      </select>
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div class="row">
-                <span id="clock" class="clock">0.0 s</span>
-                <label class="pair">Speed
-                  <select id="speed">
-                    <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
-                    <option value="1" selected>1×</option><option value="2">2×</option>
-                  </select></label>
-              </div>
-              <label class="check"><input type="checkbox" id="replay-loop" checked> Loop</label>
               <p class="hint" id="replay-hint"></p>
             </div>
             <div class="card" id="viewer-summary"></div>

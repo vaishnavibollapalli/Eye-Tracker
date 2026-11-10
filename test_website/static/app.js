@@ -66,11 +66,23 @@ function rgba(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
-async function api(url, opts) {
-  const r = await fetch(url, opts);
-  let body = null;
-  try { body = await r.json(); } catch { /* not JSON */ }
+/* JSON from the server. A dropped connection or a cut-off reply is retried
+   once, so a hiccup mid-demo does not leave the page half-drawn. */
+async function api(url, opts, retry = 1) {
+  let r, body = null;
+  try {
+    r = await fetch(url, opts);
+    body = await r.json();
+  } catch (e) {
+    if (r && !r.ok) throw new Error(`Server error ${r.status} ${r.statusText}`);
+    if (retry > 0) return api(url, opts, retry - 1);
+    throw new Error("Lost the connection to the website's server. Is its window still open?");
+  }
   if (!r.ok) throw new Error((body && body.error) || `Server error ${r.status} ${r.statusText}`);
+  if (body == null) {
+    if (retry > 0) return api(url, opts, retry - 1);
+    throw new Error("The server sent an empty reply; please try again.");
+  }
   return body;
 }
 
@@ -111,7 +123,7 @@ function updateOutputs() {
   $("#eps-out").textContent = $("#eps").value;
   $("#min-samples-out").textContent = $("#min-samples").value;
   const ht = $("#heat-time");
-  $("#heat-time-out").textContent = ht.value === ht.max ? "all" : `${ht.value} s`;
+  $("#heat-time-out").textContent = ht.value === ht.max ? "All" : `First ${ht.value} s`;
   $("#heat-radius-out").textContent = `${$("#heat-radius").value}%`;
   $("#heat-opacity-out").textContent = Number($("#heat-opacity").value).toFixed(2);
   $("#params-hierarchical").hidden = state.method !== "hierarchical";
@@ -180,6 +192,8 @@ async function selectPoster(id) {
   state.current = null;
   state.base = null;
   $("#summary").hidden = true;
+  $("#findings").hidden = true;
+  state.hotRegion = null;
   showMsg("Loading poster…");
   try {
     state.img = await loadImage(`/api/posters/${encodeURIComponent(id)}/image`);
@@ -199,8 +213,8 @@ function layout() {
   const [x0, y0, x1, y1] = p.bounds;
   const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
   const stage = $("#stage");
-  const availW = stage.clientWidth - 2;
-  const availH = Math.max(360, window.innerHeight - 150);
+  const availW = stage.clientWidth - 2 - 44;                     // border + padding
+  const availH = Math.max(360, window.innerHeight - 220);       // top bar, tabs, padding, key hint
   const s = Math.min(availW / bw, availH / bh);
   const dpr = window.devicePixelRatio || 1;
   const w = Math.round(bw * s * dpr), h = Math.round(bh * s * dpr);
@@ -242,6 +256,7 @@ async function runClustering() {
     if (token === state.runToken && state.poster.id === params.poster) selectEntry(entry);
     else renderHistory();
   } catch (e) {
+    console.error(e);
     if (token === state.runToken) {
       setStatus(e.message, true);
       if (!state.current) showMsg(e.message);
@@ -258,7 +273,7 @@ function selectEntry(entry) {
   res.byNum = Object.fromEntries(res.regions.map((r) => [r.num, r]));
   state.picked[entry.poster] = entry.params;
   loadParams(entry.params);
-  setStatus(`Showing: ${res.label}`);
+  setStatus(`${res.label} · ${res.k} regions`);
   hideMsg();
   renderAll();
   prepareReplay();
@@ -267,7 +282,32 @@ function selectEntry(entry) {
 /* ------------------------------------------------------------ panels --- */
 
 function renderAll() {
-  renderSummary(); renderRegions(); renderScores(); renderHistory(); fillParticipants(); draw();
+  renderFindings(); renderSummary(); renderRegions(); renderScores(); renderHistory(); fillParticipants(); draw();
+}
+
+/* the headline facts for this poster and clustering */
+function renderFindings() {
+  const el = $("#findings");
+  const res = state.current && state.current.result;
+  if (!res) { el.hidden = true; return; }
+  const most = res.regions[0];
+  const first = res.regions.reduce((a, b) => (b.pct_first_fix > a.pct_first_fix ? b : a));
+  const share = res.type_share || {};
+  el.innerHTML = `
+    <h3 class="card-title">Key findings</h3>
+    <div class="findings">
+      <div class="finding"><span class="lbl">Looked at most</span>
+        <div class="head">${rchip(most)}<span class="big">${Math.round(most.pct_gaze)}%<small> of viewing time</small></span></div>
+        <div class="what">${contentHTML(most.content, false)}</div></div>
+      <div class="finding"><span class="lbl">Looked at first</span>
+        <div class="head">${rchip(first)}<span class="big">${Math.round(first.pct_first_fix)}%<small> of people looked here first</small></span></div>
+        <div class="what">${contentHTML(first.content, false)}</div></div>
+      <div class="finding"><span class="lbl">Where the viewing time went</span>
+        <div class="split">${TYPE_ORDER.map((t) => `<i style="width:${(share[t] || 0) * 100}%;background:var(--t-${t})"></i>`).join("")}</div>
+        <div class="split-legend">${TYPE_ORDER.filter((t) => (share[t] || 0) >= 0.005)
+          .map((t) => `<span><i style="background:var(--t-${t})"></i>${TYPE_NAMES[t]} ${pct(share[t])}</span>`).join("")}</div></div>
+    </div>`;
+  el.hidden = state.view === "replay";
 }
 
 function renderSummary() {
@@ -275,25 +315,38 @@ function renderSummary() {
   const res = state.current && state.current.result;
   if (!res) { el.hidden = true; return; }
   const dropped = res.selected_k - res.k;
-  const note = dropped > 0
-    ? `<div class="hint" style="grid-column:1/-1">k=${res.selected_k} was chosen; ${dropped} region${dropped > 1 ? "s" : ""} with under 1% of gaze dropped.</div>` : "";
+  const tile = (k, v, d) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
   el.innerHTML = `
-    <div class="title">${esc(res.label)}</div>
-    <div class="metric"><span>Regions</span><b>${res.k}</b></div>
-    <div class="metric"><span>Fixations used</span><b>${res.n_points.toLocaleString()}</b> <span>of ${res.n_input.toLocaleString()}</span></div>
-    <div class="metric"><span>Silhouette (higher better)</span><b>${fmt(res.metrics.sil, 3)}</b></div>
-    <div class="metric"><span>Davies-Bouldin (lower better)</span><b>${fmt(res.metrics.db, 3)}</b></div>
-    <div class="metric"><span>Calinski-Harabasz (higher better)</span><b>${fmt(res.metrics.ch, 0)}</b></div>
-    ${note}`;
+    <h3 class="card-title">Clustering quality</h3>
+    <p class="quality-sub">${esc(res.label)}</p>
+    <div class="tiles">
+      ${tile("Regions", res.k, dropped > 0 ? `k = ${res.selected_k}; ${dropped} tiny region${dropped > 1 ? "s" : ""} dropped` : "&nbsp;")}
+      ${tile("Silhouette", fmt(res.metrics.sil, 3), "higher is better")}
+      ${tile("Davies-Bouldin", fmt(res.metrics.db, 3), "lower is better")}
+      ${tile("Calinski-Harabasz", fmt(res.metrics.ch, 0), "higher is better")}
+    </div>
+    <p class="quality-note">${res.n_points.toLocaleString()} of ${res.n_input.toLocaleString()} fixations used
+      (stray points off the poster are left out).</p>`;
   el.hidden = false;
 }
 
 function renderRegions() {
   const res = state.current && state.current.result;
-  $("#regions tbody").innerHTML = !res ? "" : res.regions.map((r) => `
-    <tr><td><i class="swatch" style="background:${r.color}"></i>R${r.num}</td>
-      <td class="content-cell">${contentHTML(r.content)}</td>
-      <td>${fmt(r.pct_gaze, 1)}%</td><td>${fmt(r.pct_first_fix, 0)}%</td></tr>`).join("");
+  if (!res) { $("#regions").innerHTML = ""; return; }
+  const max = Math.max(...res.regions.map((r) => r.pct_gaze || 0)) || 1;
+  $("#regions").innerHTML = res.regions.map((r) => {
+    const c = r.content;
+    const others = c.parts.slice(1).filter((p) => p.share >= 0.1).map((p) => `${esc(p.label)} ${pct(p.share)}`);
+    return `<div class="region-row" data-num="${r.num}">
+      ${rchip(r)}
+      <div class="rbody">
+        <div class="rlabel">${typeBadge(c.type)}${esc(c.label)}</div>
+        <div class="rmeta">First look for ${Math.round(r.pct_first_fix)}% · seen by ${r.n_participants} people</div>
+        ${c.share < 0.75 && others.length ? `<span class="also">Also covers ${others.join(", ")}</span>` : ""}
+      </div>
+      <div class="rpct"><b>${fmt(r.pct_gaze, 1)}%</b><span class="mini"><i style="width:${(r.pct_gaze / max) * 100}%;background:${r.color}"></i></span></div>
+    </div>`;
+  }).join("");
 }
 
 function renderScores() {
@@ -396,28 +449,36 @@ function hullPath(r) {
 
 function drawHulls(res, fill) {
   ctx.lineJoin = "round";
+  const hot = state.hotRegion;
   for (const r of res.regions) {
     if (r.hull.length < 3) continue;
+    const isHot = r.num === hot, dim = hot != null && !isHot;
     hullPath(r);
-    if (fill) { ctx.fillStyle = rgba(r.color, 0.12); ctx.fill(); }
-    ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = px(4.5); ctx.stroke();
-    ctx.strokeStyle = r.color; ctx.lineWidth = px(2.4); ctx.stroke();
+    if (fill || isHot) { ctx.fillStyle = rgba(r.color, isHot ? 0.38 : dim ? 0.06 : 0.16); ctx.fill(); }
+    ctx.strokeStyle = `rgba(255,255,255,${dim ? 0.4 : 0.9})`; ctx.lineWidth = px(isHot ? 6 : 4.5); ctx.stroke();
+    ctx.strokeStyle = dim ? rgba(r.color, 0.5) : r.color; ctx.lineWidth = px(isHot ? 3.4 : 2.4); ctx.stroke();
   }
 }
 
 function drawLabels(res) {
-  ctx.font = `bold ${px(11)}px system-ui, sans-serif`;
+  ctx.font = `700 ${px(11.5)}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const hot = state.hotRegion;
   for (const r of res.regions) {
     const text = `R${r.num}  ${Math.round(r.pct_gaze)}%`;
-    const w = ctx.measureText(text).width + px(12), h = px(18);
+    const w = ctx.measureText(text).width + px(14), h = px(20);
     const [cx, cy] = r.center;
+    ctx.save();
+    ctx.globalAlpha = hot != null && r.num !== hot ? 0.45 : 1;
+    ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = px(4); ctx.shadowOffsetY = px(1);
     ctx.beginPath();
-    ctx.roundRect(cx - w / 2, cy - h / 2, w, h, px(5));
-    ctx.fillStyle = rgba(r.color, 0.9); ctx.fill();
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = px(1); ctx.stroke();
+    ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2);
+    ctx.fillStyle = r.color; ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = px(1.2); ctx.stroke();
     ctx.fillStyle = "#fff";
     ctx.fillText(text, cx, cy + px(0.5));
+    ctx.restore();
   }
 }
 
@@ -869,38 +930,52 @@ function renderCompare(rows) {
       title="${TYPE_NAMES[t]} ${pct(share[t] || 0)}"></i>`).join("");
     const legend = TYPE_ORDER.filter((t) => share[t] >= 0.005).map((t) => `${TYPE_NAMES[t]} ${pct(share[t])}`).join(" · ");
     return `<tr>
-      <td>${name}<small>${esc(r.label)}${r.picked ? " · your pick" : ""}</small></td>
-      <td class="content-cell">${rchip(mv)} ${Math.round(mv.pct_gaze)}% of fixation time<br>${contentHTML(mv.content)}</td>
-      <td class="content-cell">${rchip(fl)} first for ${Math.round(fl.pct_first_fix)}% of people<br>${contentHTML(fl.content)}</td>
+      <td>${name}<small>${esc(r.label)}${r.picked ? " · your settings" : ""}</small></td>
+      <td class="cmp-cell"><div class="head">${rchip(mv)} ${Math.round(mv.pct_gaze)}% of viewing time</div>${contentHTML(mv.content, false)}</td>
+      <td class="cmp-cell"><div class="head">${rchip(fl)} first for ${Math.round(fl.pct_first_fix)}% of people</div>${contentHTML(fl.content, false)}</td>
       <td><div class="order">${order}</div></td>
       <td><div class="bar">${bar}</div><div class="bar-legend">${legend}</div></td></tr>`;
   }).join("");
 
-  // plain-language summary across posters
+  // headline insights across posters
   const el = $("#cmp-summary");
   if (!ok.length) { el.hidden = true; return; }
-  const groupBy = (key) => {
+  const n = ok.length;
+  const byType = (key) => {
     const m = {};
     for (const r of ok) (m[r[key].content.type] ||= []).push(r.name);
-    return TYPE_ORDER.filter((t) => m[t]).sort((a, b) => m[b].length - m[a].length)
-      .map((t) => `<b>${TYPE_NAMES[t].toLowerCase()}</b> on ${m[t].length} (${m[t].map(esc).join(" · ")})`).join("; ");
+    return TYPE_ORDER.filter((t) => m[t]).sort((a, b) => m[b].length - m[a].length).map((t) => [t, m[t]]);
   };
-  const mean = (t) => ok.reduce((s, r) => s + (r.type_share[t] || 0), 0) / ok.length;
+  const tally = (groups) => {
+    const [[t0, names0], ...rest] = groups;
+    return {
+      v: `${TYPE_NAMES[t0]} on ${names0.length} of ${n}`,
+      d: rest.map(([t, names]) => `${TYPE_NAMES[t]} on ${names.length}`).join(" · ") || "&nbsp;",
+      names: rest.map(([t, names]) => `${TYPE_NAMES[t]}: ${names.map(esc).join(", ")}`).join("<br>"),
+    };
+  };
+  const mean = (t) => ok.reduce((s, r) => s + (r.type_share[t] || 0), 0) / n;
   const top = (t) => ok.reduce((a, b) => ((b.type_share[t] || 0) > (a.type_share[t] || 0) ? b : a));
-  const extremes = ["text", "image", "shape"].filter((t) => (top(t).type_share[t] || 0) > 0.05)
-    .map((t) => `${TYPE_NAMES[t].toLowerCase()}: <b>${esc(top(t).name)}</b> (${pct(top(t).type_share[t])})`).join("; ");
   const differ = ok.filter((r) => r.first_look.content.type !== r.most_viewed.content.type);
+  const most = tally(byType("most_viewed")), first = tally(byType("first_look"));
+  const insight = (k, v, d, names = "") =>
+    `<div class="insight"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div>${names ? `<div class="names">${names}</div>` : ""}</div>`;
   el.innerHTML = `
-    <h3>Across the ${ok.length} posters</h3>
-    <ul>
-      <li>The most-viewed region was ${groupBy("most_viewed")}.</li>
-      <li>The region people looked at first was ${groupBy("first_look")}.</li>
-      <li>On average, ${pct(mean("text"))} of fixation time was on text, ${pct(mean("image"))} on images,
-        ${pct(mean("shape"))} on shapes and ${pct(mean("background"))} on empty areas or background.</li>
-      <li>Largest share of fixation time on ${extremes}.</li>
-      <li>On ${differ.length} poster${differ.length === 1 ? "" : "s"} the first look went to a different kind of content
-        than the most-viewed region${differ.length ? ` (${differ.map((r) => `${esc(r.name)}: first ${TYPE_NAMES[r.first_look.content.type].toLowerCase()}, most ${TYPE_NAMES[r.most_viewed.content.type].toLowerCase()}`).join("; ")})` : ""}.</li>
-    </ul>`;
+    <h3>Across the ${n} posters</h3>
+    <div class="insight-grid">
+      ${insight("Looked at most", most.v, most.d, most.names)}
+      ${insight("Looked at first", first.v, first.d, first.names)}
+      ${insight("Average viewing time", `${pct(mean("text"))} on text`,
+        `<div class="split">${TYPE_ORDER.map((t) => `<i style="width:${mean(t) * 100}%;background:var(--t-${t})"></i>`).join("")}</div>
+         <div class="split-legend">${TYPE_ORDER.map((t) => `<span><i style="background:var(--t-${t})"></i>${TYPE_NAMES[t]} ${pct(mean(t))}</span>`).join("")}</div>`)}
+      ${insight("Most text-focused poster", esc(top("text").name),
+        `${pct(top("text").type_share.text)} of its viewing time was on text`,
+        ["image", "shape"].filter((t) => (top(t).type_share[t] || 0) > 0.05)
+          .map((t) => `Most ${TYPE_NAMES[t].toLowerCase()}-focused: ${esc(top(t).name)} (${pct(top(t).type_share[t])})`).join("<br>"))}
+      ${insight("First look ≠ longest look", `${differ.length} of ${n} posters`,
+        "People looked first at one kind of content but spent longest on another.",
+        differ.map((r) => `${esc(r.name)}: ${TYPE_NAMES[r.first_look.content.type].toLowerCase()} → ${TYPE_NAMES[r.most_viewed.content.type].toLowerCase()}`).join("<br>"))}
+    </div>`;
   el.hidden = false;
 }
 
@@ -942,6 +1017,7 @@ function bind() {
     state.view = b.dataset.view;
     setSeg("view", "view", state.view);
     $$(".view-controls").forEach((el) => { el.hidden = el.dataset.for !== state.view; });
+    $("#findings").hidden = !state.current || state.view === "replay";
     if (state.view !== "replay") pause();
     draw(); updateClock();
   }));
@@ -967,14 +1043,23 @@ function bind() {
       state.replay.playing ? pause() : play();
     } else if (k === "arrowleft" || k === "arrowright") {
       e.preventDefault();
-      const i = state.posters.findIndex((p) => p.id === state.poster.id);
-      const next = state.posters[(i + (k === "arrowright" ? 1 : state.posters.length - 1)) % state.posters.length];
-      $("#poster").value = next.id;
-      selectPoster(next.id);
+      stepPoster(k === "arrowright" ? 1 : -1);
     } else if (["1", "2", "3"].includes(k)) {
       $$("#view button")[+k - 1].click();
     }
   });
+
+  $("#prev-poster").addEventListener("click", () => stepPoster(-1));
+  $("#next-poster").addEventListener("click", () => stepPoster(1));
+
+  // pointing at a region in the list highlights it on the poster
+  const regions = $("#regions");
+  regions.addEventListener("mouseover", (e) => {
+    const row = e.target.closest(".region-row");
+    const num = row ? +row.dataset.num : null;
+    if (num !== state.hotRegion) { state.hotRegion = num; draw(); }
+  });
+  regions.addEventListener("mouseleave", () => { state.hotRegion = null; draw(); });
 
   $("#present-toggle").addEventListener("click", togglePresent);
   $("#theme-toggle").addEventListener("click", () => {
@@ -1009,6 +1094,14 @@ function showThemeIcon() {
   const b = $("#theme-toggle");
   b.textContent = dark ? "☀" : "☾";
   b.title = dark ? "Switch to light theme" : "Switch to dark theme";
+}
+
+function stepPoster(dir) {
+  if (!state.poster) return;
+  const i = state.posters.findIndex((p) => p.id === state.poster.id);
+  const next = state.posters[(i + dir + state.posters.length) % state.posters.length];
+  $("#poster").value = next.id;
+  selectPoster(next.id);
 }
 
 function togglePresent() {
