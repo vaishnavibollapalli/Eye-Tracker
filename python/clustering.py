@@ -63,15 +63,19 @@ def _filter_outliers_auto(poster_df, img_w, img_h):
     return df.reset_index(drop=True)
 
 
-def cluster_hierarchical_auto(poster_df, poster_name, linkage_method, img_w, img_h):
+def cluster_hierarchical_auto(poster_df, poster_name, linkage_method, img_w, img_h,
+                              k=None, k_min=6, k_max=14, tolerance=0.15):
+    """Picks k in k_min..k_max automatically, or uses k if given. The defaults
+    are the original settings."""
+    fixed_k = k
     poster_df = _filter_outliers_auto(poster_df, img_w, img_h)
-    
+
     X = poster_df[["x", "y"]].to_numpy()
     w = poster_df["duration"].to_numpy()
     Z = linkage(X, method=linkage_method, metric="euclidean")
 
     scores = []
-    for k in range(6, 15):
+    for k in range(k_min, k_max + 1):
         labels = fcluster(Z, t=k, criterion="maxclust")
         if len(set(labels)) < 2: continue
         m = _all_metrics(X, labels)
@@ -88,14 +92,17 @@ def cluster_hierarchical_auto(poster_df, poster_name, linkage_method, img_w, img
     
     # TOLERANCE-BASED SELECTION: pick largest k within 0.05 of the peak; im picking .4
     max_score = df["score"].max()
-    tolerance = 0.15
     candidates = df[df["score"] >= (max_score - tolerance)]
     best_row = candidates.loc[candidates["k"].idxmax()]
     best_k = int(best_row["k"])
+    if fixed_k is not None:
+        best_k = int(fixed_k)
+        m = _all_metrics(X, fcluster(Z, t=best_k, criterion="maxclust"))
+        best_row = pd.Series({"k": best_k, **m})
 
     print(f"\n[Hierarchical - {linkage_method}] {poster_name}")
     print(df.to_string(index=False, float_format="%.3f"))
-    print(f"-> Selected k={best_k} (Tolerance-based choice)")
+    print(f"-> Selected k={best_k} ({'fixed' if fixed_k is not None else 'Tolerance-based choice'})")
 
     labels = fcluster(Z, t=best_k, criterion="maxclust")
     
@@ -119,7 +126,8 @@ def cluster_hierarchical_auto(poster_df, poster_name, linkage_method, img_w, img
     return {
         "method": f"hierarchical-{linkage_method}", "data": out,
         "centers": np.array(centers), "k": len(set(labels)), "linkage": linkage_method,
-        "sil": best_row["sil"], "db": best_row["db"], "ch": best_row["ch"]
+        "sil": best_row["sil"], "db": best_row["db"], "ch": best_row["ch"],
+        "selected_k": best_k, "scores": df,
     }
 
 

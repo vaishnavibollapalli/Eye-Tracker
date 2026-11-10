@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Poster Cluster Explorer</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Poster Cluster Explorer</h1>
+    <label class="poster-pick">
+      <span>Poster</span>
+      <select id="poster"></select>
+    </label>
+    <span id="poster-meta" class="muted"></span>
+  </header>
+
+  <div class="layout">
+    <!-- ======================= controls ======================= -->
+    <aside class="sidebar">
+      <section class="card">
+        <h2>1. Clustering method</h2>
+        <div class="seg" role="tablist" id="method">
+          <button data-method="hierarchical" class="on">Hierarchical</button>
+          <button data-method="dbscan">DBSCAN</button>
+        </div>
+
+        <div id="params-hierarchical" class="params">
+          <label class="row">
+            <span>Linkage</span>
+            <select id="linkage">
+              <option value="complete">complete</option>
+              <option value="average">average</option>
+              <option value="ward">ward</option>
+              <option value="single">single</option>
+            </select>
+          </label>
+          <div class="row">
+            <span>Number of clusters (k)</span>
+            <div class="seg small" id="k-mode">
+              <button data-mode="auto" class="on">Auto</button>
+              <button data-mode="fixed">Fixed</button>
+            </div>
+          </div>
+          <div id="k-auto">
+            <label class="row"><span>Search k from</span>
+              <span class="pair"><input type="number" id="k-min" min="2" max="30" value="6">
+              to <input type="number" id="k-max" min="2" max="30" value="14"></span></label>
+            <label class="slider"><span>Tolerance <output id="tolerance-out">0.15</output></span>
+              <input type="range" id="tolerance" min="0" max="0.5" step="0.01" value="0.15"></label>
+            <p class="hint">Auto picks the largest k whose combined score is within the tolerance of the best.</p>
+          </div>
+          <div id="k-fixed" hidden>
+            <label class="slider"><span>k <output id="k-out">8</output></span>
+              <input type="range" id="k" min="2" max="25" step="1" value="8"></label>
+          </div>
+        </div>
+
+        <div id="params-dbscan" class="params" hidden>
+          <label class="slider"><span>eps (neighbourhood radius, px) <output id="eps-out">35</output></span>
+            <input type="range" id="eps" min="5" max="150" step="1" value="35"></label>
+          <label class="slider"><span>min_samples <output id="min-samples-out">10</output></span>
+            <input type="range" id="min-samples" min="2" max="60" step="1" value="10"></label>
+          <p class="hint">Larger eps merges nearby areas; larger min_samples needs denser areas to form a cluster.</p>
+        </div>
+
+        <div class="actions">
+          <button id="run" class="primary">Run clustering</button>
+          <button id="reset" class="ghost" title="The settings demo.py uses for this poster">demo.py settings</button>
+        </div>
+        <label class="check"><input type="checkbox" id="auto-run"> Re-run automatically when I change a setting</label>
+      </section>
+
+      <section class="card">
+        <h2>2. Compare settings</h2>
+        <p class="hint">Each run is kept here. Click a row to show it; the best value of each score is highlighted.</p>
+        <div class="table-wrap">
+          <table id="history">
+            <thead><tr><th>Setting</th><th title="regions kept">k</th>
+              <th title="Silhouette: higher is better">Sil ↑</th>
+              <th title="Davies-Bouldin: lower is better">DB ↓</th>
+              <th title="Calinski-Harabasz: higher is better">CH ↑</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="history-empty" class="muted">No runs yet.</p>
+      </section>
+    </aside>
+
+    <!-- ======================= views ======================= -->
+    <main class="main">
+      <div class="view-head">
+        <div class="seg" id="view">
+          <button data-view="clusters" class="on">Clusters</button>
+          <button data-view="heatmap">Heatmap</button>
+          <button data-view="replay">Gaze replay</button>
+        </div>
+        <div id="status" class="status"></div>
+      </div>
+
+      <div class="stage-wrap">
+        <div class="stage" id="stage">
+          <canvas id="canvas"></canvas>
+          <div id="stage-msg" class="stage-msg">Loading…</div>
+        </div>
+
+        <div class="panel">
+          <div id="summary" class="card summary" hidden></div>
+
+          <!-- clusters -->
+          <div class="view-controls" data-for="clusters">
+            <div class="card">
+              <div class="toggles">
+                <label class="check"><input type="checkbox" id="show-points" checked> Fixation points</label>
+                <label class="check"><input type="checkbox" id="show-hulls" checked> Outlines</label>
+                <label class="check"><input type="checkbox" id="show-labels" checked> Labels</label>
+              </div>
+              <table class="regions" id="regions">
+                <thead><tr><th>Region</th><th title="share of total fixation time">% gaze</th>
+                  <th title="share of participants whose first fixation landed here">% first look</th>
+                  <th>Fixations</th><th>People</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="card" id="scores-card" hidden>
+              <h3>How auto chose k</h3>
+              <p class="hint">Scores for each k tried. The combined score averages the three, normalised.</p>
+              <table class="regions" id="scores">
+                <thead><tr><th>k</th><th>Sil ↑</th><th>DB ↓</th><th>CH ↑</th><th>Combined</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- heatmap -->
+          <div class="view-controls" data-for="heatmap" hidden>
+            <div class="card">
+              <label class="row"><span>Whose gaze</span>
+                <select id="heat-who"><option value="all">All participants</option></select></label>
+              <label class="slider"><span>First <output id="heat-time-out">all</output> of viewing</span>
+                <input type="range" id="heat-time" min="1" max="20" step="1" value="20"></label>
+              <label class="slider"><span>Blur radius <output id="heat-radius-out">3%</output></span>
+                <input type="range" id="heat-radius" min="1" max="8" step="0.25" value="3"></label>
+              <label class="slider"><span>Opacity <output id="heat-opacity-out">0.70</output></span>
+                <input type="range" id="heat-opacity" min="0.2" max="1" step="0.05" value="0.7"></label>
+              <label class="check"><input type="checkbox" id="heat-hulls" checked> Show the chosen clustering's outlines</label>
+              <div class="legend"><span>less</span><i id="heat-legend"></i><span>more fixation time</span></div>
+            </div>
+          </div>
+
+          <!-- replay -->
+          <div class="view-controls" data-for="replay" hidden>
+            <div class="card">
+              <label class="row"><span>Participant</span><select id="replay-pid"></select></label>
+              <div class="player">
+                <button id="play" class="primary round" title="Play / pause">▶</button>
+                <input type="range" id="scrub" min="0" max="1000" value="0" step="1">
+              </div>
+              <div class="row">
+                <span id="clock" class="clock">0.0 s</span>
+                <label class="pair">Speed
+                  <select id="speed">
+                    <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+                    <option value="1" selected>1×</option><option value="2">2×</option>
+                  </select></label>
+              </div>
+              <label class="check"><input type="checkbox" id="replay-loop" checked> Loop</label>
+              <p class="hint">The dot takes the colour of the cluster being fixated and turns white during saccades.
+                ★ marks the participant whose viewing best matches the group's for this clustering.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
