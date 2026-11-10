@@ -21,12 +21,20 @@ MIN_FIXATION_MS = 100
 PARAMS = {
     "Armin Hofman- 1955":  {"linkage": "complete", "eps": 30, "min_samples": 15},
     "Barry Ceck - 1988":   {"linkage": "complete", "eps": 35, "min_samples": 15},
-    #"bookcover":           {"linkage": "complete", "eps": 30, "min_samples": 10},
-    #"David Carson - 1990": {"linkage": "complete", "eps": 30, "min_samples": 10},
-    #"David Carson":        {"linkage": "average",  "eps": 30, "min_samples": 12},
-    #"nancy":               {"linkage": "complete", "eps": 35, "min_samples": 10},
-    #"Paul Rand, 1947":     {"linkage": "complete", "eps": 30, "min_samples": 12},
-    #"Paula Scher - 1995":  {"linkage": "complete", "eps": 35, "min_samples": 15},
+    "bookcover":           {"linkage": "complete", "eps": 30, "min_samples": 10},
+    "David Carson - 1990": {"linkage": "complete", "eps": 30, "min_samples": 10},
+    "David Carson":        {"linkage": "average",  "eps": 30, "min_samples": 12},
+    "Ella Rosenblatt- 2021":    {"linkage": "average",  "eps": 30, "min_samples": 12},
+    "Iris Chung- 2015":         {"linkage": "complete", "eps": 35, "min_samples": 10},
+    "Jan Tschichold-1927-Die Frau ohne Namen":      {"linkage": "complete", "eps": 35, "min_samples": 10},
+    "Jan Tschichold-1938-Der":  {"linkage": "complete", "eps": 35, "min_samples": 10},
+    "Jan Tschichold-1938-Der":  {"linkage": "complete", "eps": 35, "min_samples": 10},
+    "nancy":               {"linkage": "complete", "eps": 35, "min_samples": 10},
+    "Paul Rand, 1947":     {"linkage": "complete", "eps": 30, "min_samples": 12},
+    
+    "Paula Scher - 1995":  {"linkage": "complete", "eps": 35, "min_samples": 15},
+    "Scott Barry- 2010":               {"linkage": "complete", "eps": 35, "min_samples": 10},
+    "Sean Alatorre":               {"linkage": "complete", "eps": 35, "min_samples": 10},
 }
 
 POSTERS_TO_RUN = list(PARAMS.keys())
