@@ -45,12 +45,28 @@ N_PARTICIPANTS = 48
 MIN_FIXATION_MS = 100
 SCREEN_W, SCREEN_H = 1920, 1200
 
-# same settings as demo.py
+# Keys are the stimulus names in Native_SlideEvents.csv. Clustering settings
+# match demo.py, except: demo.py's "nancy" matches no stimulus (it is
+# "nancy poster"), and Joost Schmidt, missing there, uses its most common
+# settings.
 PARAMS = {
-    "Armin Hofman- 1955": {"file": "Armin Hofman- 1955.jpg", "linkage": "complete",
-                           "eps": 30, "min_samples": 15},
-    "Barry Ceck - 1988":  {"file": "Barry Ceck - 1988.jpg", "linkage": "complete",
-                           "eps": 35, "min_samples": 15},
+    "Armin Hofman- 1955":    {"file": "Armin Hofman- 1955.jpg", "linkage": "complete", "eps": 30, "min_samples": 15},
+    "Barry Ceck - 1988":     {"file": "Barry Ceck - 1988.jpg", "linkage": "complete", "eps": 35, "min_samples": 15},
+    "bookcover":             {"file": "bookcover.jpg", "linkage": "complete", "eps": 30, "min_samples": 10},
+    "David Carson - 1990":   {"file": "David Carson - 1990.jpg", "linkage": "complete", "eps": 30, "min_samples": 10},
+    "David Carson":          {"file": "David Carson.jpg", "linkage": "average", "eps": 30, "min_samples": 12},
+    "Ella Rosenblatt- 2021": {"file": "Ella Rosenblatt- 2021.jpg", "linkage": "average", "eps": 30, "min_samples": 12},
+    "Iris Chung- 2015":      {"file": "Iris Chung- 2015.jpg", "linkage": "complete", "eps": 35, "min_samples": 10},
+    "Jan Tschichold-1927-Die Frau ohne Namen":
+                             {"file": "Jan Tschichold-1927-Die Frau ohne Namen.JPG", "linkage": "complete", "eps": 35, "min_samples": 10},
+    "Jan Tschichold-1938-Der": {"file": "Jan Tschichold-1938-Der.JPG", "linkage": "complete", "eps": 35, "min_samples": 10},
+    "Joost Schmidt-1923-Saatliches":
+                             {"file": "Joost Schmidt-1923-Saatliches.JPG", "linkage": "complete", "eps": 35, "min_samples": 10},
+    "nancy poster":          {"file": "nancy.jpg", "linkage": "complete", "eps": 35, "min_samples": 10},
+    "Paul Rand, 1947":       {"file": "Paul Rand, 1947.jpg", "linkage": "complete", "eps": 30, "min_samples": 12},
+    "Paula Scher - 1995":    {"file": "Paula Scher - 1995.jpg", "linkage": "complete", "eps": 35, "min_samples": 15},
+    "Scott Barry- 2010":     {"file": "Scott Barry- 2010.jpg", "linkage": "complete", "eps": 35, "min_samples": 10},
+    "Sean Alatorre":         {"file": "Sean Alatorre.jpg", "linkage": "complete", "eps": 35, "min_samples": 10},
 }
 
 # the first ten match demo.py so R1-R9 look the same as its COMPARE figures;
@@ -337,7 +353,16 @@ def main():
     ap = argparse.ArgumentParser(description="Gaze animations with clusters on the poster")
     ap.add_argument("--participant", help="replay this participant (e.g. p12) instead of the "
                                           "most representative one")
+    ap.add_argument("--posters", nargs="+", metavar="NAME",
+                    help="only these posters (case-insensitive substring of the name, "
+                         "e.g. nancy carson)")
     args = ap.parse_args()
+    if args.posters:
+        wanted = [s.lower() for s in args.posters]
+        for stim in [s for s in PARAMS if not any(w in s.lower() for w in wanted)]:
+            del PARAMS[stim]
+        if not PARAMS:
+            sys.exit("no poster matches --posters")
 
     print("Loading participants...")
     fixations = {stim: [] for stim in PARAMS}
