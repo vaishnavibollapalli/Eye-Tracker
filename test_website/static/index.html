@@ -5,22 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Poster Gaze Explorer</title>
   <meta name="description" content="Where people look on graphic-design posters: eye-tracking clusters, heatmaps and gaze replays.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b6ef5'/%3E%3Cpath d='M5 16s4-7 11-7 11 7 11 7-4 7-11 7S5 16 5 16z' fill='white'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%233b6ef5'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%230f766e'/%3E%3Cellipse cx='20' cy='20' rx='13' ry='8' fill='none' stroke='white' stroke-width='1.8'/%3E%3Ccircle cx='20' cy='20' r='4.5' fill='none' stroke='white' stroke-width='1.6'/%3E%3Ccircle cx='20' cy='20' r='2.2' fill='white'/%3E%3C/svg%3E">
   <script>
-    // apply a saved theme before the page paints
     try { const t = localStorage.getItem("pce-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <canvas id="gaze-bg" aria-hidden="true"></canvas>
+
   <header class="topbar">
     <div class="brand">
       <span class="logo" aria-hidden="true">
-        <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8"/><path d="M5 16s4-7 11-7 11 7 11 7-4 7-11 7S5 16 5 16z"/><circle cx="16" cy="16" r="4"/></svg>
+        <svg viewBox="0 0 40 40">
+          <defs>
+            <linearGradient id="logo-bg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#0f766e"/>
+              <stop offset="100%" stop-color="#0b3b4a"/>
+            </linearGradient>
+          </defs>
+          <rect width="40" height="40" rx="10" fill="url(#logo-bg)"/>
+          <ellipse cx="20" cy="20" rx="13" ry="8" fill="none" stroke="white" stroke-width="1.8" opacity="0.9"/>
+          <circle cx="20" cy="20" r="4.5" fill="none" stroke="white" stroke-width="1.6"/>
+          <circle cx="20" cy="20" r="2.2" fill="white"/>
+        </svg>
       </span>
       <div>
-        <h1>Poster Gaze Explorer</h1>
-        <span class="sub" id="study-meta">Eye-tracking study</span>
+        <h1>Poster Gaze Explorer <span class="live-dot"></span></h1>
+        <span class="sub" id="study-meta">Visual Attention Lab · Eye-Tracking Study</span>
       </div>
     </div>
 
@@ -38,12 +50,11 @@
     </div>
   </header>
 
-  <!-- ======================= compare page ======================= -->
   <section id="compare" class="compare" hidden>
     <div class="compare-head">
       <div>
         <p class="eyebrow">All 15 posters</p>
-        <h2 class="page-title">How people looked at each poster</h2>
+        <h2 class="page-title">Attention Across All 15 Posters</h2>
         <p class="lead">The region people looked at most, the one they looked at first, the order the group reached the regions,
           and how viewing time splits between text, images and shapes.</p>
       </div>
@@ -73,12 +84,14 @@
     </div>
   </section>
 
-  <!-- ======================= explorer ======================= -->
   <div class="layout" id="explorer">
     <aside class="sidebar">
       <section class="card">
         <h3 class="card-title">Clustering</h3>
-        <div class="seg full" role="tablist" id="method">
+        <p class="hint" style="margin-top: 6px;">
+          Groups fixations into attention regions. Auto-k uses silhouette, DB, and CH together.
+        </p>
+        <div class="seg full" role="tablist" id="method" style="margin-top: 12px;">
           <button data-method="hierarchical" class="on">Hierarchical</button>
           <button data-method="dbscan">DBSCAN</button>
         </div>
@@ -157,6 +170,10 @@
 
       <div class="stage-wrap">
         <div class="stage-col">
+          <div class="session-pill">
+            <span class="session-dot"></span>
+            Session: iMotions · 48 participants · 16-second exposure
+          </div>
           <div class="stage" id="stage">
             <canvas id="canvas"></canvas>
             <div id="stage-msg" class="stage-msg">Loading…</div>
@@ -168,7 +185,6 @@
         <div class="panel">
           <div id="findings" class="card" hidden></div>
 
-          <!-- clusters -->
           <div class="view-controls" data-for="clusters">
             <div class="card">
               <div class="card-head">
@@ -192,7 +208,6 @@
             </div>
           </div>
 
-          <!-- heatmap -->
           <div class="view-controls" data-for="heatmap" hidden>
             <div class="card">
               <h3 class="card-title">Heatmap</h3>
@@ -209,7 +224,6 @@
             </div>
           </div>
 
-          <!-- replay -->
           <div class="view-controls" data-for="replay" hidden>
             <div class="card">
               <label class="field"><span>Whose gaze</span><select id="replay-pid"></select></label>
@@ -239,5 +253,104 @@
   </div>
 
   <script src="/static/app.js"></script>
+
+  <script>
+  /* Background: simulated scanpaths (fixation circles joined by saccade lines)
+     drifting over slow heat blobs. Colours come from --gz / --gz2 in style.css. */
+  (() => {
+    const c = document.getElementById("gaze-bg"), g = c.getContext("2d");
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const col = { a: "94,234,212", b: "251,191,36", k: 1 };
+    const FADE = 7000, rnd = (a, b) => a + Math.random() * (b - a);
+    let W = 0, H = 0, clock = 0, walkers = [];
+    function colours() {
+      const s = getComputedStyle(document.documentElement);
+      col.a = s.getPropertyValue("--gz").trim() || col.a;
+      col.b = s.getPropertyValue("--gz2").trim() || col.b;
+      col.k = parseFloat(s.getPropertyValue("--gz-k")) || 1;
+    }
+    function resize() {
+      const d = Math.min(devicePixelRatio || 1, 1.5);
+      W = innerWidth; H = innerHeight; c.width = W * d; c.height = H * d;
+      g.setTransform(d, 0, 0, d, 0, 0);
+    }
+    class Walker {
+      constructor(alt) {
+        this.alt = alt; this.x = rnd(0, W); this.y = rnd(0, H); this.fix = [];
+        this.state = "dwell"; this.t = 0; this.dur = rnd(300, 800);
+      }
+      pick() {
+        const d = Math.random() < 0.18 ? rnd(300, 700) : rnd(70, 240), a = rnd(0, 6.283);
+        const x = Math.min(W + 40, Math.max(-40, this.x + Math.cos(a) * d));
+        const y = Math.min(H + 40, Math.max(-40, this.y + Math.sin(a) * d * 0.7));
+        this.from = [this.x, this.y]; this.to = [x, y]; this.s = 0; this.state = "sacc";
+        this.sd = 50 + Math.hypot(x - this.x, y - this.y) * 0.16;
+      }
+      step(dt) {
+        if (this.state === "dwell") {
+          this.t += dt;
+          const f = this.fix[this.fix.length - 1];
+          if (f) f.r = 3 + Math.min(this.t, 900) / 900 * 11;
+          if (this.t >= this.dur) this.pick();
+          return;
+        }
+        this.s += dt;
+        const u = Math.min(1, this.s / this.sd), e = u * u * (3 - 2 * u);
+        this.x = this.from[0] + (this.to[0] - this.from[0]) * e;
+        this.y = this.from[1] + (this.to[1] - this.from[1]) * e;
+        if (u >= 1) {
+          this.state = "dwell"; this.t = 0; this.dur = rnd(250, 900);
+          this.fix.push({ x: this.x, y: this.y, r: 3, t: clock });
+          if (this.fix.length > 16) this.fix.shift();
+        }
+      }
+      draw() {
+        const rgb = this.alt ? col.b : col.a, k = col.k;
+        const live = this.fix.filter((f) => clock - f.t < FADE);
+        g.lineWidth = 1.2;
+        for (let i = 1; i < live.length; i++) {
+          g.strokeStyle = `rgba(${rgb},${(1 - (clock - live[i].t) / FADE) * 0.42 * k})`;
+          g.beginPath(); g.moveTo(live[i - 1].x, live[i - 1].y); g.lineTo(live[i].x, live[i].y); g.stroke();
+        }
+        g.lineWidth = 1;
+        for (const f of live) {
+          const life = 1 - (clock - f.t) / FADE;
+          g.fillStyle = `rgba(${rgb},${life * 0.12 * k})`; g.strokeStyle = `rgba(${rgb},${life * 0.55 * k})`;
+          g.beginPath(); g.arc(f.x, f.y, f.r, 0, 6.283); g.fill(); g.stroke();
+        }
+        const x = this.x, y = this.y;
+        g.strokeStyle = `rgba(${rgb},${0.8 * k})`; g.lineWidth = 1.2;
+        g.beginPath(); g.arc(x, y, 5, 0, 6.283);
+        g.moveTo(x - 11, y); g.lineTo(x - 7, y); g.moveTo(x + 7, y); g.lineTo(x + 11, y);
+        g.moveTo(x, y - 11); g.lineTo(x, y - 7); g.moveTo(x, y + 7); g.lineTo(x, y + 11);
+        g.stroke();
+      }
+    }
+    const blobs = [[.2, .25, .34, 0], [.78, .2, .28, 2], [.62, .75, .36, 4], [.12, .82, .26, 1]];
+    function frame(dt) {
+      clock += dt;
+      g.clearRect(0, 0, W, H);
+      for (const [bx, by, br, ph] of blobs) {
+        const x = (bx + Math.sin(clock / 9000 + ph) * 0.05) * W, y = (by + Math.cos(clock / 11000 + ph) * 0.05) * H;
+        const r = br * Math.max(W, H), gr = g.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, `rgba(${col.a},${0.10 * col.k})`);
+        gr.addColorStop(0.5, `rgba(${col.b},${0.025 * col.k})`);
+        gr.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      for (const w of walkers) { w.step(dt); w.draw(); }
+    }
+    let last = null, n = 0;
+    function loop(ts) {
+      if (last != null && !document.hidden) { if (++n % 90 === 0) colours(); frame(Math.min(50, ts - last)); }
+      last = ts; requestAnimationFrame(loop);
+    }
+    resize(); colours();
+    walkers = [new Walker(false), new Walker(true), new Walker(false)];
+    addEventListener("resize", () => { resize(); if (reduce) frame(0); });
+    new MutationObserver(colours).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    if (reduce) for (let i = 0; i < 700; i++) frame(16); else requestAnimationFrame(loop);
+  })();
+  </script>
 </body>
 </html>
